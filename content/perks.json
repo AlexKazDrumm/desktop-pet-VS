@@ -1,0 +1,10 @@
+[
+  { "id": "bolt_dmg", "name": "Ice Bolt +", "desc": "+25% урона ледяной стрелы" },
+  { "id": "fire_rate", "name": "Rapid Frost", "desc": "-12% перезарядка выстрела" },
+  { "id": "aura_r", "name": "Widen Aura", "desc": "+30 к радиусу ауры" },
+  { "id": "aura_slow", "name": "Deep Freeze", "desc": "+10% замедление в ауре" },
+  { "id": "nova_cd", "name": "Quick Nova", "desc": "-20% перезарядка новы" },
+  { "id": "hp_up",  "name": "Cold Resolve", "desc": "+20 HP и лечит на 10" },
+  { "id": "icicle_barrage", "name": "Icicle Barrage", "desc": "Периодически выпускает 6 сосулек по кругу" },
+  { "id": "ice_barrier", "name": "Ice Barrier", "desc": "Щит поглощает 30% урона" }
+]

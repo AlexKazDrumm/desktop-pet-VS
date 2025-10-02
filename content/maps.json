@@ -1,0 +1,24 @@
+{
+  "frozen_crossroads": {
+    "id": "frozen_crossroads",
+    "name": "Frozen Crossroads",
+    "bg": { "top": "#0e1722", "bottom": "#0a111a" },
+    "tile": "assets/maps/frozen_crossroads_tile.png",
+    "particle": "assets/maps/particle_snow.png",
+    "parallax": { "speedX": 8, "speedY": 28 },
+    "particles": { "rate": 3, "lifespan": 6000, "speedYMin": 20, "speedYMax": 60, "scaleStart": 1.0, "scaleEnd": 0.4, "alphaStart": 0.9, "alphaEnd": 0.0 },
+    "enemyTint": "#cfefff",
+    "spawn": { "baseEvery": 1.0, "growth": 0.003, "bossEvery": 60 }
+  },
+  "crystal_cavern": {
+    "id": "crystal_cavern",
+    "name": "Crystal Cavern",
+    "bg": { "top": "#0b0f18", "bottom": "#07121e" },
+    "tile": "assets/maps/crystal_cavern_tile.png",
+    "particle": "assets/maps/particle_crystal.png",
+    "parallax": { "speedX": -12, "speedY": 6 },
+    "particles": { "rate": 2, "lifespan": 5500, "speedYMin": 10, "speedYMax": 30, "scaleStart": 0.9, "scaleEnd": 0.3, "alphaStart": 0.85, "alphaEnd": 0.0 },
+    "enemyTint": "#9be0ff",
+    "spawn": { "baseEvery": 0.9, "growth": 0.0035, "bossEvery": 55 }
+  }
+}

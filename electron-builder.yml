@@ -1,0 +1,12 @@
+appId: com.demo.arienn
+productName: Arienn Ice Survivor Demo
+files:
+  - "index.html"
+  - "style.css"
+  - "game.js"
+  - "content/**"
+  - "electron/**"
+asar: true
+win: { target: nsis }
+linux: { target: AppImage }
+mac: { target: dmg }

@@ -1,0 +1,11 @@
+{
+  "arienn": {
+    "id": "arienn",
+    "name": "Ариэнн Ледяной Осколок",
+    "desc": "Маг льда: аура замедления, ледяные болты, нова.",
+    "atlas": "assets/characters/arienn/atlas.png",
+    "atlasJson": "assets/characters/arienn/atlas.json",
+    "anim": { "walk": "arienn_walk_", "cast": "arienn_cast_", "frames": 4 },
+    "base": { "hpMax": 100, "speed": 240, "r": 18, "fireRate": 1.15, "bulletDmg": 14, "auraR": 120, "auraSlow": 0.6, "novaCD": 6 }
+  }
+}
