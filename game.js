@@ -1461,6 +1461,7 @@ class GameScene extends Phaser.Scene {
     }
     const margin = 140;
     const minDist = 180;
+    const portalExclusionR = 220;
     const picked = groups.map(g => g[Math.floor(Math.random() * g.length)]);
     const positions = [];
     const centerX = this.worldW / 2;
@@ -1478,13 +1479,15 @@ class GameScene extends Phaser.Scene {
         x = Phaser.Math.Between(margin, this.worldW - margin);
         y = Phaser.Math.Between(margin, this.worldH - margin);
         const tooClose = positions.some(p => (p.x - x) ** 2 + (p.y - y) ** 2 < minDist ** 2);
-        if (!tooClose && (x - centerX) ** 2 + (y - centerY) ** 2 > 120 ** 2) break;
+        const tooCloseToPortal = (x - centerX) ** 2 + (y - centerY) ** 2 < portalExclusionR ** 2;
+        if (!tooClose && !tooCloseToPortal) break;
       }
       positions.push({ x, y });
       const sprite = this.obstacles.create(x, y, 'obj_' + key).setDepth(DEPTH.PICKUP);
       const isTree = key.startsWith('tree_');
       const isSnowman = key.startsWith('snowman_');
-      const targetH = this.player.displayHeight * (isTree ? 1.5 : (isSnowman ? 1.2 : OBJECT_MAX_HEIGHT));
+      const isCactus = key.startsWith('cactoos_');
+      const targetH = this.player.displayHeight * (isTree ? 1.5 : (isSnowman ? 1.2 : (isCactus ? 1.4 : OBJECT_MAX_HEIGHT)));
       sprite.setScale(targetH / sprite.height);
       sprite.refreshBody();
       const prompt = this.add.text(x, y, 'E', {
