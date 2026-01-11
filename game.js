@@ -30,7 +30,10 @@ const OBJECT_DETAILS = {
 
 const REAPER_Q = {
   main: {
-    text: (idx) => `Which landmark was it (#${idx})?`,
+    text: (idx) => {
+      const ord = ['First', 'Second', 'Third', 'Fourth'][idx - 1] || 'Next';
+      return `${ord} landmark - what was it?`;
+    },
     options: ['tree', 'stone', 'cactus', 'snowman', 'grave', 'skeleton', 'house']
   },
   tree: [
@@ -147,6 +150,21 @@ function showEndGame(message, onExit) {
   `;
   showOverlay(box);
   box.querySelector('#endBtn').onclick = () => {
+    hideOverlay();
+    if (onExit) onExit();
+  };
+}
+
+function showWinGame(message, onExit) {
+  const box = document.createElement('div');
+  box.className = 'card';
+  box.innerHTML = `
+    <h3>Victory</h3>
+    <div class="small" style="margin-top:6px">${message}</div>
+    <div style="margin-top:12px"><span class="btn" id="winBtn">Main menu</span></div>
+  `;
+  showOverlay(box);
+  box.querySelector('#winBtn').onclick = () => {
     hideOverlay();
     if (onExit) onExit();
   };
@@ -493,7 +511,7 @@ class HellScene extends Phaser.Scene {
     this.quizActive = false;
     this.reaperHinted = false;
     this.currentArenaMap = Save.data?.last?.map || 'frozen_crossroads';
-    this.nextMap = (this.currentArenaMap === 'frozen_crossroads') ? 'crystal_cavern' : 'crystal_cavern';
+    this.nextMap = (this.currentArenaMap === 'frozen_crossroads') ? 'crystal_cavern' : null;
     this.lastObjects = (Save.data?.last?.interactables || []).map(o => ({ ...o }));
   }
 
@@ -641,24 +659,32 @@ class HellScene extends Phaser.Scene {
 
   finishReaperQuiz() {
     if (this.quizCorrect === 4) {
-      this.showLine('reaper', 'Your memory is true. The way is open.', () => {
-        this.spawnHellPortal();
-        this.portalUnlocked = true;
-        this.quizActive = false;
-      });
+      if (this.currentArenaMap === 'frozen_crossroads') {
+        this.showLine('reaper', 'Your answers align. The portal to the cavern is open.', () => {
+          this.spawnHellPortal();
+          this.portalUnlocked = true;
+          this.quizActive = false;
+        });
+      } else {
+        this.showLine('reaper', 'You have done well. The rift is sealed.', () => {
+          this.quizActive = false;
+          showWinGame('You stopped the spirit surge and saved the world.', () => switchScene(this, 'menu'));
+        });
+      }
     } else {
       const fruits = Save.data.stats.oblivionFruits || 0;
       if (fruits > 0) {
-        this.showLine('reaper', 'You failed. Eat an Oblivion Fruit to return and try again.', () => {
+        this.showLine('reaper', 'You failed. Eat an Oblivion Fruit and return to try again.', () => {
           Save.data.stats.oblivionFruits = Math.max(0, fruits - 1);
-          Save.commit();
+          Save.data.last.retryMap = this.currentArenaMap;
+          Save.commit(true);
           this.quizActive = false;
           Save.data.last.map = this.currentArenaMap;
           Save.commit();
           switchScene(this, 'game');
         });
       } else {
-        this.showLine('reaper', 'You are mistaken. With no fruit to offer, this is the end.', () => {
+        this.showLine('reaper', 'No one may remember this meeting. Without a fruit, you are lost. Seek them from some wendigos next time.', () => {
           this.quizActive = false;
           showEndGame('You failed the trial in Hell.', () => switchScene(this, 'menu'));
         });
@@ -1407,13 +1433,32 @@ class GameScene extends Phaser.Scene {
   }
 
   startIntroDialog() {
-    const lines = [
-      'All right. Deep breath. The frost will listen.',
-      'Keep moving - these halls wake up fast.',
-      'Bolts first, nova when they crowd you.',
-      'The cold is ours. Don\'t let it slow you.',
-      'Ready. Let\'s begin.'
-    ];
+    const mapId = this.selMap.id;
+    const retry = Save.data.last?.retryMap === mapId;
+    let lines = [];
+    if (retry) {
+      lines = [
+        "I don't remember. My head hurts.",
+        "Feels like I've been here before.",
+        "I need four landmarks to open the portal.",
+        "Find them fast - I must reach the Guide."
+      ];
+    } else if (mapId === 'frozen_crossroads') {
+      lines = [
+        'Spirits are surging - something is wrong.',
+        'To stop it, I must reach the Guide.',
+        'I need four landmarks to open his portal.',
+        'Remember them. The portal depends on it.',
+        "Let's move."
+      ];
+    } else {
+      lines = [
+        'Even here, winter spirits seep through this desert cavern.',
+        'It is spreading across realities.',
+        'Find four landmarks - we need the portal again.',
+        "Quickly. We can't let this grow."
+      ];
+    }
     let idx = 0;
 
     const box = document.createElement('div');
@@ -1437,6 +1482,10 @@ class GameScene extends Phaser.Scene {
         hideOverlay();
         this.introDone = true;
         box.removeEventListener('click', onClick);
+        if (Save.data.last?.retryMap === mapId) {
+          Save.data.last.retryMap = null;
+          Save.commit();
+        }
         return;
       }
       box.querySelector('.dialog-body').textContent = lines[idx];
