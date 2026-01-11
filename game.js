@@ -958,7 +958,8 @@ class GameScene extends Phaser.Scene {
       }
       positions.push({ x, y });
       const sprite = this.obstacles.create(x, y, 'obj_' + key).setDepth(DEPTH.PICKUP);
-      const targetH = this.player.displayHeight * OBJECT_MAX_HEIGHT;
+      const isTree = key.startsWith('tree_');
+      const targetH = this.player.displayHeight * (isTree ? 1.5 : OBJECT_MAX_HEIGHT);
       sprite.setScale(targetH / sprite.height);
       sprite.refreshBody();
       const prompt = this.add.text(x, y, 'E', {
@@ -978,7 +979,7 @@ class GameScene extends Phaser.Scene {
     if (this.portal) return;
     const x = this.worldW / 2;
     const y = this.worldH / 2;
-    this.portal = this.obstacles.create(x, y, 'obj_portal').setDepth(DEPTH.FX + 1);
+    this.portal = this.obstacles.create(x, y, 'obj_portal').setDepth(DEPTH.PLAYER - 1);
     const targetH = this.player.displayHeight * PORTAL_HEIGHT_MULT;
     this.portal.setScale(targetH / this.portal.height);
     this.portal.refreshBody();
