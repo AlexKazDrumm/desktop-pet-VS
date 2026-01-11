@@ -133,7 +133,10 @@ canvas { image-rendering: pixelated; }
   line-height:1.4;
 }
 .dialog-actions{
-  text-align:right;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  justify-content:flex-end;
   margin-top:10px;
 }
 

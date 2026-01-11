@@ -444,7 +444,7 @@ class HellScene extends Phaser.Scene {
       .setImmovable(true)
       .setDepth(DEPTH.ENEMY);
     this.reaper.body.allowGravity = false;
-    const reaperH = this.player.displayHeight * 2.0;
+    const reaperH = this.player.displayHeight * 3.0;
     this.reaper.setScale(reaperH / this.reaper.height);
     this.reaper.refreshBody();
     this.physics.add.collider(this.player, this.reaper);
@@ -534,6 +534,7 @@ class HellScene extends Phaser.Scene {
     if (this.quizActive) return;
     this.quizActive = true;
     this.quizRemaining = this.lastObjects.map(o => ({ ...o }));
+    this.quizChosenTypes = new Set();
     this.quizCorrect = 0;
     this.quizIndex = 0;
     this.askNextLandmark();
@@ -545,7 +546,9 @@ class HellScene extends Phaser.Scene {
       return;
     }
     const q = REAPER_Q.main;
-    this.showQuestion('reaper', q.text(this.quizIndex + 1), q.options, (choice) => {
+    const options = q.options.filter(o => !this.quizChosenTypes.has(o));
+    this.showQuestion('reaper', q.text(this.quizIndex + 1), options, (choice) => {
+      this.quizChosenTypes.add(choice);
       this.showLine('player', choice, () => {
         this.askTypeDetails(choice);
       });
@@ -1422,7 +1425,8 @@ class GameScene extends Phaser.Scene {
       positions.push({ x, y });
       const sprite = this.obstacles.create(x, y, 'obj_' + key).setDepth(DEPTH.PICKUP);
       const isTree = key.startsWith('tree_');
-      const targetH = this.player.displayHeight * (isTree ? 1.5 : OBJECT_MAX_HEIGHT);
+      const isSnowman = key.startsWith('snowman_');
+      const targetH = this.player.displayHeight * (isTree ? 1.5 : (isSnowman ? 1.2 : OBJECT_MAX_HEIGHT));
       sprite.setScale(targetH / sprite.height);
       sprite.refreshBody();
       const prompt = this.add.text(x, y, 'E', {
