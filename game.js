@@ -21,7 +21,7 @@ const Save = {
       profile: { name: '' },
       settings: { sound: true },
       meta: { runs: 0, bestTime: 0 },
-      stats: { enemiesKilled: 0, boltsFired: 0, secondsPlayed: 0 },
+      stats: { enemiesKilled: 0, boltsFired: 0, secondsPlayed: 0, oblivionFruits: 0 },
       last: { character: 'arienn', map: 'frozen_crossroads' },
       characters: { arienn: { bestLevel: 0, seenPerks: [] } }
     };
@@ -44,6 +44,8 @@ const Save = {
           };
         }
         if (!this.data.version || this.data.version < 2) this.data.version = 2;
+        if (!this.data.stats) this.data.stats = { enemiesKilled: 0, boltsFired: 0, secondsPlayed: 0 };
+        if (typeof this.data.stats.oblivionFruits !== 'number') this.data.stats.oblivionFruits = 0;
       } catch {}
     } catch {
       this.data = this._default();
@@ -408,7 +410,8 @@ class GameScene extends Phaser.Scene {
         'stone_1','stone_2','stone_3',
         'grave_1','grave_2','grave_3',
         'snowman_1','snowman_2','snowman_3',
-        'portal'
+        'portal',
+        'pear'
       ];
       objKeys.forEach(k => {
         if (!this.textures.exists('obj_' + k)) {
@@ -690,11 +693,15 @@ class GameScene extends Phaser.Scene {
                    kind === 'ghoul'   ? 'enemy_ghoul_'   : 'enemy_snowling_';
     const e = this.physics.add.sprite(x, y, 'base', prefix + '0')
       .setDepth(kind === 'wendigo' ? DEPTH.BOSS : DEPTH.ENEMY);
-    e.kind = kind; e.hp = hp; e.speed = speed; e.dead = false;
+    e.kind = kind; e.hp = hp; e.hpMax = hp; e.speed = speed; e.dead = false;
     e.setCollideWorldBounds(true);
 
     if (kind === 'wendigo') e.body.setSize(64, 80).setOffset(16, 8);
     else e.body.setSize(36, 48).setOffset(14, 8);
+
+    if (kind === 'wendigo') {
+      e.hpBar = this.add.graphics().setDepth(DEPTH.FX + 2);
+    }
 
     e.play('walk_' + kind);
     return e;
@@ -705,6 +712,7 @@ class GameScene extends Phaser.Scene {
     e.dead = true;
     e.body.enable = false;
     e.play('die_' + e.kind, true);
+    e.hpBar?.destroy();
     this.tweens.add({
       targets: e, alpha: 0,
       duration: 280, ease: 'Quad.easeOut',
@@ -716,6 +724,9 @@ class GameScene extends Phaser.Scene {
     if (!e || e.dead) return;
     e.hp -= dmg;
     if (e.hp <= 0) {
+      if (e.kind === 'wendigo' && Math.random() < 0.33) {
+        this.spawnPickup(e.x, e.y, 'pear');
+      }
       Save.data.stats.enemiesKilled++;
       this.spawnPickup(e.x, e.y, Math.random() < 0.15 ? 'xp_big' : 'xp_small');
       this.killEnemy(e);
@@ -805,13 +816,23 @@ class GameScene extends Phaser.Scene {
 
   spawnBoss() {
     const W = this.worldW;
-    const e = this.createEnemy('wendigo', Math.random() * W, -60, 600 + (this.time.now / 1000) * 8, 85);
+    const base = 120 + (this.time.now / 1000) * 3;
+    const max = Math.max(90, (this.stats?.speed || 240) - 20);
+    const speed = Math.min(base, max);
+    const e = this.createEnemy('wendigo', Math.random() * W, -60, 600 + (this.time.now / 1000) * 8, speed);
     this.enemies.add(e);
   }
 
   spawnPickup(x, y, type) {
-    const p = this.physics.add.sprite(x, y, 'base', type === 'xp_big' ? 'xp_big' : 'xp_small')
-      .setDepth(DEPTH.PICKUP);
+    let p = null;
+    if (type === 'pear') {
+      p = this.physics.add.sprite(x, y, 'obj_pear').setDepth(DEPTH.PICKUP);
+      const targetH = this.player.displayHeight * 0.5;
+      p.setScale(targetH / p.height);
+    } else {
+      p = this.physics.add.sprite(x, y, 'base', type === 'xp_big' ? 'xp_big' : 'xp_small')
+        .setDepth(DEPTH.PICKUP);
+    }
     p.type = type; this.pickups.add(p);
   }
 
@@ -1026,22 +1047,70 @@ class GameScene extends Phaser.Scene {
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; if (b.life <= 0) b.destroy();
     });
 
+    const wendigos = [];
+    this.enemies.children.iterate(e => {
+      if (!e || e.dead) return;
+      if (e.kind === 'wendigo') wendigos.push(e);
+    });
+
     this.enemies.children.iterate(e => {
       if (!e || e.dead) return;
 
       const vx = p.x - e.x, vy = p.y - e.y, d = Math.hypot(vx, vy) || 1;
       let sp = e.speed;
       if (Math.hypot(e.x - p.x, e.y - p.y) < s.auraR) sp *= s.auraSlow;
-      e.body.setVelocity((vx / d) * sp, (vy / d) * sp);
+      let vdx = (vx / d) * sp;
+      let vdy = (vy / d) * sp;
+
+      if (e.kind !== 'wendigo' && wendigos.length) {
+        let closest = null;
+        let bestD2 = 1e9;
+        wendigos.forEach(w => {
+          const dxw = e.x - w.x, dyw = e.y - w.y;
+          const d2 = dxw * dxw + dyw * dyw;
+          if (d2 < bestD2) { bestD2 = d2; closest = w; }
+        });
+        if (closest) {
+          const dW = Math.sqrt(bestD2) || 1;
+          if (dW < 140) {
+            const push = (140 - dW) * 2.2;
+            vdx += ((e.x - closest.x) / dW) * push;
+            vdy += ((e.y - closest.y) / dW) * push;
+          }
+        }
+      }
+
+      e.body.setVelocity(vdx, vdy);
 
       e.flipX = (p.x < e.x);
+
+      if (e.kind === 'wendigo' && e.hpBar) {
+        const barW = 70, barH = 6;
+        const x = e.x - barW / 2;
+        const y = e.y - e.displayHeight * 0.65;
+        const ratio = Phaser.Math.Clamp(e.hp / Math.max(1, e.hpMax), 0, 1);
+        e.hpBar.clear();
+        e.hpBar.fillStyle(0x0b111a, 0.8);
+        e.hpBar.fillRect(x, y, barW, barH);
+        e.hpBar.fillStyle(0xff5c5c, 0.95);
+        e.hpBar.fillRect(x + 1, y + 1, (barW - 2) * ratio, barH - 2);
+        e.hpBar.lineStyle(1, 0xffffff, 0.35);
+        e.hpBar.strokeRect(x, y, barW, barH);
+      }
     });
 
     this.pickups.children.iterate(pp => {
       if (!pp) return;
       const d = Math.hypot(p.x - pp.x, p.y - pp.y) || 1;
       if (d < 180) { const ux = (p.x - pp.x) / d, uy = (p.y - pp.y) / d; pp.x += ux * 160 * dt; pp.y += uy * 160 * dt; }
-      if (d < 24) { s.xp += (pp.type === 'xp_big' ? 8 : 3); pp.destroy(); }
+      if (d < 24) {
+        if (pp.type === 'pear') {
+          Save.data.stats.oblivionFruits = (Save.data.stats.oblivionFruits || 0) + 1;
+        } else {
+          s.xp += (pp.type === 'xp_big' ? 8 : 3);
+        }
+        pp.destroy();
+      }
     });
 
     this.interactTarget = null;
@@ -1127,7 +1196,8 @@ class GameScene extends Phaser.Scene {
       `LVL: ${s.level}`,
       `XP: ${s.xp}`,
       `Nova: ${s.nova > 0 ? s.nova.toFixed(1) + 's' : 'ready'}`,
-      `Relics: ${this.interactedCount}/${this.interactables.length || 4}`
+      `Relics: ${this.interactedCount}/${this.interactables.length || 4}`,
+      `Oblivion Fruits: ${Save.data.stats.oblivionFruits || 0}`
     ];
     setHUD(hudLines);
     this.drawMinimap();
