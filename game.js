@@ -10,6 +10,11 @@ const INTERACT_RADIUS = 46;
 const OBJECT_MAX_HEIGHT = 0.9;
 const PORTAL_HEIGHT_MULT = 2.0;
 const MAX_ENEMIES = 200;
+  const BASE_ENEMY_STATS = {
+    snowling: { hp: 14, speed: 90 },
+    ghoul: { hp: 56, speed: 110 },
+    wendigo: { hp: 280, speed: 180 }
+  };
 const OBJECT_DETAILS = {
   tree_1: { type: 'tree', details: { leaves: 'no leaves', branches: 'few branches' } },
   tree_2: { type: 'tree', details: { leaves: 'no leaves', branches: 'many branches' } },
@@ -684,7 +689,7 @@ class HellScene extends Phaser.Scene {
           switchScene(this, 'game');
         });
       } else {
-        this.showLine('reaper', 'No one may remember this meeting. Without a fruit, you are lost. Seek them from some wendigos next time.', () => {
+        this.showLine('reaper', 'No one may remember this meeting. Without a fruit, you are lost. Seek them from SOME wendigos next time.', () => {
           this.quizActive = false;
           showEndGame('You failed the trial in Hell.', () => switchScene(this, 'menu'));
         });
@@ -1145,6 +1150,7 @@ class GameScene extends Phaser.Scene {
 
     this.pausedByMenu = false;
     this.enemies = this.physics.add.group();
+    this.bosses = this.physics.add.group();
     this.bullets = this.physics.add.group();
     this.pickups = this.physics.add.group();
     this.obstacles = this.physics.add.staticGroup();
@@ -1154,6 +1160,7 @@ class GameScene extends Phaser.Scene {
     this.bossTimer = this.selMap.spawn.bossEvery;
     this.icicleTimer = 0;
     this.timeStart = this.time.now / 1000;
+    this.runStart = this.time.now;
 
 
     this.minimap = {
@@ -1178,6 +1185,8 @@ class GameScene extends Phaser.Scene {
       b.destroy();
     });
     this.physics.add.collider(this.enemies, this.enemies);
+    this.physics.add.collider(this.bosses, this.bosses);
+    this.physics.add.collider(this.bosses, this.enemies);
     this.physics.add.collider(this.enemies, this.obstacles);
     this.scale.on('resize', this.onResize, this);
 
@@ -1214,6 +1223,7 @@ class GameScene extends Phaser.Scene {
 
       this.em?.destroy();
       safeClearGroup(this.enemies, (e) => { e.hpBar?.destroy(); });
+      safeClearGroup(this.bosses);
       safeClearGroup(this.bullets);
       safeClearGroup(this.pickups);
       safeClearGroup(this.obstacles);
@@ -1347,10 +1357,10 @@ class GameScene extends Phaser.Scene {
       clampToWorld();
     }
 
-    const t = (this.time.now / 1000) / 60;
-    const speed = Phaser.Math.Clamp(70 + t * 12, 70, 170);
-    const hp = 10 + t * 8;
     const kind = Math.random() < 0.6 ? 'snowling' : 'ghoul';
+    const mapMult = this.selMap.id === 'crystal_cavern' ? 4 : 1;
+    const speed = kind === 'ghoul' ? BASE_ENEMY_STATS.ghoul.speed : BASE_ENEMY_STATS.snowling.speed;
+    const hp = (kind === 'ghoul' ? BASE_ENEMY_STATS.ghoul.hp : BASE_ENEMY_STATS.snowling.hp) * mapMult;
     const e = this.createEnemy(kind, x, y, hp, speed);
     if (this.selMap.enemyTint) {
       e.setTint(Phaser.Display.Color.HexStringToColor(this.selMap.enemyTint).color);
@@ -1360,11 +1370,13 @@ class GameScene extends Phaser.Scene {
 
   spawnBoss() {
     const W = this.worldW;
-    const base = 120 + (this.time.now / 1000) * 3;
-    const max = Math.max(90, (this.stats?.speed || 240) - 20);
-    const speed = Math.min(base, max);
-    const e = this.createEnemy('wendigo', Math.random() * W, -60, 600 + (this.time.now / 1000) * 8, speed);
+    const mapMult = this.selMap.id === 'crystal_cavern' ? 4 : 1;
+    const playerSpeed = this.stats?.speed || 220;
+    const speed = Math.min(BASE_ENEMY_STATS.wendigo.speed, playerSpeed - 30);
+    const hp = BASE_ENEMY_STATS.wendigo.hp * mapMult;
+    const e = this.createEnemy('wendigo', Math.random() * W, -60, hp, speed);
     this.enemies.add(e);
+    this.bosses.add(e);
   }
 
   spawnPickup(x, y, type) {
@@ -1780,9 +1792,11 @@ class GameScene extends Phaser.Scene {
 
     if (this.introDone) {
       const activeEnemies = this.enemies.countActive(true);
+      const activeBosses = this.bosses.countActive(true);
+      const activeWeak = Math.max(0, activeEnemies - activeBosses);
       this.spawnTimer -= dt;
       const every = Phaser.Math.Clamp(
-        this.selMap.spawn.baseEvery - (this.time.now / 1000) * this.selMap.spawn.growth,
+        this.selMap.spawn.baseEvery - ((this.time.now - this.runStart) / 1000) * this.selMap.spawn.growth,
         0.23,
         this.selMap.spawn.baseEvery
       );
@@ -1796,7 +1810,8 @@ class GameScene extends Phaser.Scene {
       }
       this.bossTimer -= dt;
       if (this.bossTimer <= 0) {
-        if (activeEnemies < MAX_ENEMIES) {
+        const targetBosses = Math.floor(activeWeak / 45);
+        if (activeEnemies < MAX_ENEMIES && activeBosses < targetBosses) {
           this.bossTimer = this.selMap.spawn.bossEvery;
           this.spawnBoss();
         } else {
@@ -1843,7 +1858,7 @@ class GameScene extends Phaser.Scene {
       `LVL: ${s.level}`,
       `XP: ${s.xp}`,
       `Nova: ${s.nova > 0 ? s.nova.toFixed(1) + 's' : 'ready'}`,
-      `Relics: ${this.interactedCount}/${this.interactables.length || 4}`,
+      `Landmarks: ${this.interactedCount}/${this.interactables.length || 4}`,
       `Oblivion Fruits: ${Save.data.stats.oblivionFruits || 0}`
     ];
     setHUD(hudLines);
