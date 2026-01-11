@@ -12,6 +12,14 @@
   <div id="overlay" class="overlay hidden"></div>
   <div id="hud" class="hud"></div>
   <div id="controls" class="controls"><span>WASD - Move | Space - Nova</span></div>
+  <script>
+    window.addEventListener('error', (e) => {
+      console.error('window.error', e.error || e.message, e.filename, e.lineno, e.colno);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('unhandledrejection', e.reason);
+    });
+  </script>
   <script src="game.js" type="module"></script>
 </body>
 </html>

@@ -85,6 +85,67 @@ function setHUD(list) {
 function showOverlay(el) { OVERLAY.classList.remove('hidden'); OVERLAY.innerHTML = ''; OVERLAY.appendChild(el); }
 function hideOverlay() { OVERLAY.classList.add('hidden'); OVERLAY.innerHTML = ''; }
 
+/**
+ * Robust scene transition helper.
+ * The old version was able to "freeze" if the target scene throws during start/create:
+ * it stopped the current scene via manager, leaving nothing active.
+ *
+ * This implementation:
+ *  - Starts the next scene via ScenePlugin (so Phaser lifecycle is respected)
+ *  - Stops the current scene on next tick (after start is scheduled)
+ *  - Has a fallback to Menu if the scene key doesn't exist
+ */
+function switchScene(fromScene, toKey, data = {}) {
+  try {
+    const mgr = fromScene.scene?.manager;
+    const currentKey = fromScene.scene?.key;
+
+    if (!mgr || !currentKey) {
+      console.error('[switchScene] invalid fromScene');
+      return;
+    }
+
+    if (!mgr.keys || !mgr.keys[toKey]) {
+      console.error(`[switchScene] scene "${toKey}" not found. Falling back to menu.`);
+      fromScene.scene.start('menu');
+      return;
+    }
+
+    // Prevent double-triggers while transitioning
+    fromScene.transitioning = true;
+    if (fromScene.input?.keyboard) fromScene.input.keyboard.enabled = false;
+    if (fromScene.input) fromScene.input.enabled = false;
+
+    // Start next scene first
+    console.log('[switchScene] start', currentKey, '->', toKey, data);
+    fromScene.scene.start(toKey, data);
+
+    // Stop current scene on next tick to avoid ending up with "no active scene"
+    // if start schedules work for the same frame.
+    if (fromScene.time) {
+      fromScene.time.delayedCall(0, () => {
+        try {
+          if (mgr.isActive(currentKey)) fromScene.scene.stop(currentKey);
+        } catch (e) {
+          console.error('[switchScene] stop current failed', e);
+        }
+      });
+    } else {
+      // Fallback
+      setTimeout(() => {
+        try {
+          if (mgr.isActive(currentKey)) fromScene.scene.stop(currentKey);
+        } catch (e) {
+          console.error('[switchScene] stop current failed', e);
+        }
+      }, 0);
+    }
+  } catch (e) {
+    console.error('[switchScene] failed', e);
+    try { fromScene.scene.start('menu'); } catch {}
+  }
+}
+
 class BootScene extends Phaser.Scene {
   constructor() { super('boot'); }
   async create() {
@@ -121,6 +182,7 @@ class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#0e1620');
     const mgr = this.scene.manager;
     if (mgr.isActive('game')) mgr.stop('game');
+    if (mgr.isActive('hell')) mgr.stop('hell');
     if (HUD) HUD.innerHTML = '';
     const controls = document.getElementById('controls');
     if (controls) controls.style.display = 'none';
@@ -278,6 +340,100 @@ class MapSelectScene extends Phaser.Scene {
   }
 }
 
+class HellScene extends Phaser.Scene {
+  constructor() { super('hell'); }
+
+  preload() {
+    console.log('[hell] preload');
+    if (!this.textures.exists('hell_tile')) {
+      this.load.image('hell_tile', 'assets/maps/hell_tile.png');
+    }
+    if (!this.textures.exists('reaper_sprite')) {
+      this.load.image('reaper_sprite', 'assets/characters/npc/reaper/reaper_sprite.png');
+    }
+    const char = CONTENT.characters[Save.data.last.character] || Object.values(CONTENT.characters)[0];
+    const charKey = 'char_' + char.id;
+    if (!this.textures.exists(charKey)) {
+      this.load.atlas(charKey, char.atlas, char.atlasJson);
+    }
+  }
+
+  create() {
+    console.log('[hell] create');
+    this.cameras.main.setBackgroundColor('#12080b');
+    hideOverlay();
+    if (HUD) HUD.innerHTML = '';
+    const controls = document.getElementById('controls');
+    if (controls) controls.style.display = '';
+
+    const W = this.scale.width, H = this.scale.height;
+    this.worldW = W;
+    this.worldH = H;
+    this.cameras.main.setBounds(0, 0, W, H);
+    if (this.physics?.world) this.physics.world.setBounds(0, 0, W, H);
+
+    drawBG(this, 0x16080b, 0x0b0507);
+    this.add.tileSprite(W / 2, H / 2, W, H, 'hell_tile').setDepth(DEPTH.GROUND);
+
+    const char = CONTENT.characters[Save.data.last.character] || Object.values(CONTENT.characters)[0];
+    const charKey = 'char_' + char.id;
+
+    // Safe frame pick
+    const startFrame = (char?.anim?.walk ? (char.anim.walk + '0') : 0);
+
+    this.player = this.physics.add.sprite(W * 0.18, H * 0.62, charKey, startFrame)
+      .setCollideWorldBounds(true)
+      .setDepth(DEPTH.PLAYER);
+    this.player.body.setSize(28, 44).setOffset(18, 16);
+
+    this.keys = this.input.keyboard.addKeys('W,A,S,D');
+    this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+
+    this.reaper = this.add.sprite(W * 0.82, H * 0.52, 'reaper_sprite')
+      .setDepth(DEPTH.ENEMY);
+    this.tweens.add({
+      targets: this.reaper,
+      y: this.reaper.y - 6,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    // Optional: allow returning to menu (prevents "stuck" if you need quick exit)
+    this._escHandler = () => {
+      this.scene.start('menu');
+    };
+  }
+
+  update(_time, delta) {
+    if (!this.player) return;
+    const dt = delta / 1000;
+    const speed = 220;
+
+    const dx = (this.keys.D.isDown ? 1 : 0) + (this.keys.A.isDown ? -1 : 0);
+    const dy = (this.keys.S.isDown ? 1 : 0) + (this.keys.W.isDown ? -1 : 0);
+    const len = Math.hypot(dx, dy) || 1;
+
+    if (dx !== 0 || dy !== 0) {
+      this.player.body.setVelocity((dx / len) * speed, (dy / len) * speed);
+    } else {
+      this.player.body.setVelocity(0, 0);
+    }
+
+    // Escape -> menu (optional safety)
+    if (Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
+      this.scene.start('menu');
+      return;
+    }
+
+    setHUD([
+      `Player: ${Save.data.profile.name}`,
+      'Location: Hell'
+    ]);
+  }
+}
+
 function drawBG(scene, top = 0x0e1722, bottom = 0x0a111a) {
   const W = scene.worldW, H = scene.worldH;
   if (scene.bgG) scene.bgG.destroy();
@@ -293,13 +449,18 @@ class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
 
   create() {
+    this._isShutdown = false;
+
     this.selChar = CONTENT.characters[Save.data.last.character] || Object.values(CONTENT.characters)[0];
     this.selMap  = CONTENT.maps[Save.data.last.map] || Object.values(CONTENT.maps)[0];
 
-    this.preloadAssets().then((ok) => {
+    // IMPORTANT: avoid async work continuing after scene shutdown
+    (async () => {
+      const ok = await this.preloadAssets();
+      if (this._isShutdown) return;
       if (!ok) { this.reportMissingAssets(); return; }
       this.setupWorld();
-    });
+    })();
   }
 
   onResize(gameSize){
@@ -435,10 +596,18 @@ class GameScene extends Phaser.Scene {
     }
 
     if (toLoad.length === 0) return true;
+
     return new Promise((resolve) => {
       let failed = false;
-      this.load.on('loaderror', () => { failed = true; });
-      this.load.once('complete', () => resolve(!failed));
+      const onError = (file) => {
+        failed = true;
+        console.error('[Loader] loaderror', file?.key, file?.src || file);
+      };
+      this.load.on('loaderror', onError);
+      this.load.once('complete', () => {
+        this.load.off('loaderror', onError);
+        resolve(!failed);
+      });
       this.load.start();
     });
   }
@@ -462,12 +631,20 @@ class GameScene extends Phaser.Scene {
     `;
     showOverlay(box);
 
-    fitCharGrid();
-    window.addEventListener('resize', fitCharGrid);
+    // NOTE: fitCharGrid() может быть в другом файле проекта.
+    // Чтобы ничего не ломать, вызываем только если функция существует.
+    if (typeof window.fitCharGrid === 'function') {
+      window.fitCharGrid();
+      window.addEventListener('resize', window.fitCharGrid);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        window.removeEventListener('resize', window.fitCharGrid);
+      });
+    }
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      window.removeEventListener('resize', fitCharGrid);
-    });
+    box.querySelector('#back').onclick = () => {
+      hideOverlay();
+      this.scene.start('menu');
+    };
   }
 
   frameExists(frameName) { return !!this.textures.getFrame('base', frameName); }
@@ -557,6 +734,7 @@ class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
     this.cameras.main.setBounds(0, 0, this.worldW, this.worldH);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+
     const walkKey = `${charKey}_walk`;
     const castKey = `${charKey}_cast`;
     if (!this.anims.exists(walkKey)) {
@@ -627,8 +805,11 @@ class GameScene extends Phaser.Scene {
       }
     };
 
+    // Keyboard keys (IMPORTANT: use these in update; do NOT create keys every frame)
     this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE');
     this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+
     this.pausedByMenu = false;
     this.enemies = this.physics.add.group();
     this.bullets = this.physics.add.group();
@@ -640,17 +821,21 @@ class GameScene extends Phaser.Scene {
     this.bossTimer = this.selMap.spawn.bossEvery;
     this.icicleTimer = 0;
     this.timeStart = this.time.now / 1000;
+
     Save.data.stats.oblivionFruits = 0;
     Save.commit(true);
+
     this.minimap = {
       g: this.add.graphics().setScrollFactor(0).setDepth(DEPTH.FX + 2),
       x: MINIMAP_MARGIN,
       y: H - MINIMAP_SIZE - MINIMAP_MARGIN
     };
+
     this.interactables = [];
     this.interactedCount = 0;
     this.portal = null;
-    this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.portalPrompt = null;
+    this.transitioning = false;
     this.interactableBySprite = new Map();
 
     this.facing = 1;
@@ -672,21 +857,46 @@ class GameScene extends Phaser.Scene {
       `XP: ${this.stats.xp}`,
       `Nova: ready`
     ]);
+
     this.placeInteractables();
     this.startIntroDialog();
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this._isShutdown = true;
+
+      // mark shutdown to prevent async callbacks touching destroyed scene
+      this.transitioning = true;
+
+      this.scale.off('resize', this.onResize, this);
+
+      const safeClearGroup = (grp, onItem) => {
+        if (!grp || !grp.children || typeof grp.children.iterate !== 'function') return;
+        grp.children.iterate((obj) => {
+          if (!obj) return;
+          if (onItem) onItem(obj);
+          if (typeof obj.destroy === 'function') obj.destroy();
+        });
+        if (typeof grp.clear === 'function') {
+          try { grp.clear(true, true); } catch {}
+        }
+      };
+
       this.em?.destroy();
-      this.enemies?.clear(true, true);
-      this.bullets?.clear(true, true);
-      this.pickups?.clear(true, true);
-      this.obstacles?.clear(true, true);
+      safeClearGroup(this.enemies, (e) => { e.hpBar?.destroy(); });
+      safeClearGroup(this.bullets);
+      safeClearGroup(this.pickups);
+      safeClearGroup(this.obstacles);
+
       this.interactables?.forEach(o => o.sprite?.destroy());
       this.interactables?.forEach(o => o.prompt?.destroy());
       this.interactables = [];
       this.interactTarget = null;
+
       this.portal?.destroy();
       this.portal = null;
+      this.portalPrompt?.destroy();
+      this.portalPrompt = null;
+
       this.minimap?.g?.destroy();
     });
   }
@@ -983,26 +1193,43 @@ class GameScene extends Phaser.Scene {
     const targetH = this.player.displayHeight * PORTAL_HEIGHT_MULT;
     this.portal.setScale(targetH / this.portal.height);
     this.portal.refreshBody();
+    if (!this.portalPrompt) {
+      this.portalPrompt = this.add.text(x, y, 'E', {
+        fontFamily: 'system-ui, Segoe UI, Roboto, Arial',
+        fontSize: '16px',
+        color: '#e7faff',
+        backgroundColor: 'rgba(10,20,28,0.7)',
+        padding: { left: 6, right: 6, top: 2, bottom: 2 }
+      }).setOrigin(0.5, 1).setDepth(DEPTH.FX + 3).setVisible(false);
+    }
   }
 
   update(time, delta) {
     if (!this.player) return;
+    if (this.transitioning) return;
+
     const dt = delta / 1000, p = this.player, s = this.stats;
+
     if (Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
       if (this.pausedByMenu) {
         document.getElementById('btnCont')?.click();
       } else {
         this.showPauseMenu();
       }
+      return;
     }
-    let dx = (this.input.keyboard.addKey('D').isDown ? 1 : 0) + (this.input.keyboard.addKey('A').isDown ? -1 : 0);
-    let dy = (this.input.keyboard.addKey('S').isDown ? 1 : 0) + (this.input.keyboard.addKey('W').isDown ? -1 : 0);
+
+    // IMPORTANT FIX: use cached keys, do NOT call addKey() every frame (it leaks & can stall the game)
+    const dx = (this.keys.D.isDown ? 1 : 0) + (this.keys.A.isDown ? -1 : 0);
+    const dy = (this.keys.S.isDown ? 1 : 0) + (this.keys.W.isDown ? -1 : 0);
     const len = Math.hypot(dx, dy) || 1;
+
     if (dx !== 0 || dy !== 0) {
       p.body.setVelocity((dx / len) * s.speed, (dy / len) * s.speed);
     } else {
       p.body.setVelocity(0, 0);
     }
+
     const hitEnemy = this.physics.world.collide(this.player, this.enemies);
     this.physics.world.collide(this.player, this.obstacles);
     this.physics.world.collide(this.enemies, this.enemies);
@@ -1015,7 +1242,7 @@ class GameScene extends Phaser.Scene {
     s.fireCd = (s.fireCd || 0) - dt;
     if (target && s.fireCd <= 0) { s.fireCd = s.fireRate; this.shoot(target); }
 
-    if (this.input.keyboard.addKey('SPACE').isDown) {
+    if (this.keys.SPACE.isDown) {
       if ((s.nova || 0) <= 0) {
         s.nova = s.novaCD;
         this.playNova(p.x, p.y, s.auraR);
@@ -1147,6 +1374,37 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    if (this.portal && this.portalPrompt) {
+      const radius = INTERACT_RADIUS;
+      const halfW = this.portal.displayWidth * 0.5 + radius;
+      const halfH = this.portal.displayHeight * 0.5 + radius;
+      const inZone = Math.abs(p.x - this.portal.x) <= halfW && Math.abs(p.y - this.portal.y) <= halfH;
+      if (inZone) {
+        const offset = this.portal.displayHeight * 0.6;
+        this.portalPrompt.setPosition(this.portal.x, this.portal.y - offset);
+        this.portalPrompt.setVisible(true);
+
+        if (Phaser.Input.Keyboard.JustDown(this.keyE)) {
+          // Transition to Hell
+          this.portalPrompt.setVisible(false);
+          hideOverlay();
+
+          // Freeze this scene immediately to avoid any more updates/collisions while switching
+          this.transitioning = true;
+          if (this.input?.keyboard) this.input.keyboard.enabled = false;
+          if (this.physics?.world) this.physics.world.pause();
+
+          // Use robust switch (start next, then stop this)
+          this.time.delayedCall(0, () => {
+            switchScene(this, 'hell', { from: 'game', at: { x: p.x, y: p.y } });
+          });
+          return;
+        }
+      } else {
+        this.portalPrompt.setVisible(false);
+      }
+    }
+
     if (hitEnemy) {
       let dmg = 16 * dt;
       if (this.perks.ice_barrier) dmg *= 0.7;
@@ -1156,7 +1414,11 @@ class GameScene extends Phaser.Scene {
     if (this.introDone) {
       const activeEnemies = this.enemies.countActive(true);
       this.spawnTimer -= dt;
-      const every = Phaser.Math.Clamp(this.selMap.spawn.baseEvery - (this.time.now / 1000) * this.selMap.spawn.growth, 0.23, this.selMap.spawn.baseEvery);
+      const every = Phaser.Math.Clamp(
+        this.selMap.spawn.baseEvery - (this.time.now / 1000) * this.selMap.spawn.growth,
+        0.23,
+        this.selMap.spawn.baseEvery
+      );
       if (this.spawnTimer <= 0) {
         if (activeEnemies < MAX_ENEMIES) {
           this.spawnTimer = every;
@@ -1206,6 +1468,7 @@ class GameScene extends Phaser.Scene {
     this.auraG.strokeCircle(p.x, p.y, s.auraR);
 
     Save.data.stats.secondsPlayed += dt; Save.commit();
+
     const hudLines = [
       `Player: ${Save.data.profile.name}`,
       `HP: ${Math.max(0, (s.hp || 0) | 0)}/${s.hpMax}`,
@@ -1279,7 +1542,6 @@ new Phaser.Game({
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
-  scene: [BootScene, MenuScene, CharacterSelectScene, GameScene],
+  scene: [BootScene, MenuScene, CharacterSelectScene, GameScene, HellScene],
   physics: { default: 'arcade', arcade: { debug: false } }
 });
-
