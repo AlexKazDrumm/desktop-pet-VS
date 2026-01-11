@@ -1116,24 +1116,19 @@ class GameScene extends Phaser.Scene {
     this.interactTarget = null;
     if (this.introDone) {
       const radius = INTERACT_RADIUS;
-      let best = radius * radius;
-      this.interactables.forEach(o => {
-        if (o.interacted) return;
-        const halfW = o.sprite.displayWidth * 0.5 + radius;
-        const halfH = o.sprite.displayHeight * 0.5 + radius;
-        if (Math.abs(p.x - o.sprite.x) > halfW || Math.abs(p.y - o.sprite.y) > halfH) return;
-        const d2 = (o.sprite.x - p.x) ** 2 + (o.sprite.y - p.y) ** 2;
-        if (d2 < best) {
-          best = d2;
-          this.interactTarget = o;
-        }
-      });
+      let best = 1e9;
       this.interactables.forEach(o => {
         if (!o.prompt) return;
-        if (o === this.interactTarget) {
+        if (o.interacted) { o.prompt.setVisible(false); return; }
+        const halfW = o.sprite.displayWidth * 0.5 + radius;
+        const halfH = o.sprite.displayHeight * 0.5 + radius;
+        const inZone = Math.abs(p.x - o.sprite.x) <= halfW && Math.abs(p.y - o.sprite.y) <= halfH;
+        if (inZone) {
           const offset = o.sprite.displayHeight * 0.6;
           o.prompt.setPosition(o.sprite.x, o.sprite.y - offset);
           o.prompt.setVisible(true);
+          const d2 = (o.sprite.x - p.x) ** 2 + (o.sprite.y - p.y) ** 2;
+          if (d2 < best) { best = d2; this.interactTarget = o; }
         } else {
           o.prompt.setVisible(false);
         }
