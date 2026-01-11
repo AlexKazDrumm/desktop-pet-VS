@@ -22,7 +22,10 @@ const OBJECT_DETAILS = {
   grave_3: { type: 'grave', details: { shape: 'cross', base: 'flowers and candle' } },
   snowman_1: { type: 'snowman', details: { head: 'top hat', hands: 'nothing' } },
   snowman_2: { type: 'snowman', details: { head: 'multicolored hat', hands: 'broom' } },
-  snowman_3: { type: 'snowman', details: { head: 'blue hat', hands: 'gift' } }
+  snowman_3: { type: 'snowman', details: { head: 'blue hat', hands: 'gift' } },
+  cactoos_1: { type: 'cactus', details: { shape: 'round', flowers: 'one flower' } },
+  cactoos_2: { type: 'cactus', details: { shape: 'tall', flowers: 'none' } },
+  cactoos_3: { type: 'cactus', details: { shape: 'many rounded lobes', flowers: 'many flowers' } }
 };
 
 const REAPER_Q = {
@@ -133,6 +136,21 @@ function setHUD(list) {
 }
 function showOverlay(el) { OVERLAY.classList.remove('hidden'); OVERLAY.innerHTML = ''; OVERLAY.appendChild(el); }
 function hideOverlay() { OVERLAY.classList.add('hidden'); OVERLAY.innerHTML = ''; }
+
+function showEndGame(message, onExit) {
+  const box = document.createElement('div');
+  box.className = 'card';
+  box.innerHTML = `
+    <h3>Game Over</h3>
+    <div class="small" style="margin-top:6px">${message}</div>
+    <div style="margin-top:12px"><span class="btn" id="endBtn">Main menu</span></div>
+  `;
+  showOverlay(box);
+  box.querySelector('#endBtn').onclick = () => {
+    hideOverlay();
+    if (onExit) onExit();
+  };
+}
 
 /**
  * Robust scene transition helper.
@@ -341,6 +359,7 @@ class CharacterSelectScene extends Phaser.Scene {
       const id = t.getAttribute('data-id');
       Save.data.last.character = id;
       Save.data.last.map = 'frozen_crossroads';
+      Save.data.stats.oblivionFruits = 0;
       Save.commit();
       hideOverlay();
       this.scene.start('game');
@@ -414,6 +433,9 @@ class HellScene extends Phaser.Scene {
     if (HUD) HUD.innerHTML = '';
     const controls = document.getElementById('controls');
     if (controls) controls.style.display = '';
+    if (this.input) this.input.enabled = true;
+    if (this.input?.keyboard) this.input.keyboard.enabled = true;
+    if (this.physics?.world) this.physics.world.resume();
 
     const W = this.scale.width, H = this.scale.height;
     this.worldW = W;
@@ -467,7 +489,11 @@ class HellScene extends Phaser.Scene {
 
     this.hellPortal = null;
     this.hellPortalPrompt = null;
+    this.portalUnlocked = false;
     this.quizActive = false;
+    this.reaperHinted = false;
+    this.currentArenaMap = Save.data?.last?.map || 'frozen_crossroads';
+    this.nextMap = (this.currentArenaMap === 'frozen_crossroads') ? 'crystal_cavern' : 'crystal_cavern';
     this.lastObjects = (Save.data?.last?.interactables || []).map(o => ({ ...o }));
   }
 
@@ -485,6 +511,7 @@ class HellScene extends Phaser.Scene {
     } else {
       this.player.body.setVelocity(0, 0);
     }
+    if (dx !== 0) this.player.flipX = (dx < 0);
 
     // Escape -> menu (optional safety)
     if (Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
@@ -505,7 +532,11 @@ class HellScene extends Phaser.Scene {
       this.reaperPrompt.setVisible(true);
       if (Phaser.Input.Keyboard.JustDown(this.keyE)) {
         this.reaperPrompt.setVisible(false);
-        this.startReaperQuiz();
+        if (this.portalUnlocked) {
+          this.showLine('reaper', 'The portal is already open. Go.', () => {});
+        } else {
+          this.startReaperQuiz();
+        }
       }
     } else {
       this.reaperPrompt.setVisible(false);
@@ -519,6 +550,12 @@ class HellScene extends Phaser.Scene {
         const offset = this.hellPortal.displayHeight * 0.6;
         this.hellPortalPrompt.setPosition(this.hellPortal.x, this.hellPortal.y - offset);
         this.hellPortalPrompt.setVisible(true);
+        if (Phaser.Input.Keyboard.JustDown(this.keyE)) {
+          Save.data.last.map = this.nextMap;
+          Save.commit();
+          switchScene(this, 'game');
+          return;
+        }
       } else {
         this.hellPortalPrompt.setVisible(false);
       }
@@ -526,7 +563,7 @@ class HellScene extends Phaser.Scene {
 
     setHUD([
       `Player: ${Save.data.profile.name}`,
-      'Location: Hell'
+      `Oblivion Fruits: ${Save.data.stats.oblivionFruits || 0}`
     ]);
   }
 
@@ -606,12 +643,26 @@ class HellScene extends Phaser.Scene {
     if (this.quizCorrect === 4) {
       this.showLine('reaper', 'Your memory is true. The way is open.', () => {
         this.spawnHellPortal();
+        this.portalUnlocked = true;
         this.quizActive = false;
       });
     } else {
-      this.showLine('reaper', 'You are mistaken. Return when you remember.', () => {
-        this.quizActive = false;
-      });
+      const fruits = Save.data.stats.oblivionFruits || 0;
+      if (fruits > 0) {
+        this.showLine('reaper', 'You failed. Eat an Oblivion Fruit to return and try again.', () => {
+          Save.data.stats.oblivionFruits = Math.max(0, fruits - 1);
+          Save.commit();
+          this.quizActive = false;
+          Save.data.last.map = this.currentArenaMap;
+          Save.commit();
+          switchScene(this, 'game');
+        });
+      } else {
+        this.showLine('reaper', 'You are mistaken. With no fruit to offer, this is the end.', () => {
+          this.quizActive = false;
+          showEndGame('You failed the trial in Hell.', () => switchScene(this, 'menu'));
+        });
+      }
     }
   }
 
@@ -633,8 +684,9 @@ class HellScene extends Phaser.Scene {
   }
 
   showQuestion(speaker, text, options, onSelect) {
+    const playerId = Save.data.last.character || 'arienn';
     const avatar = speaker === 'player'
-      ? 'assets/characters/arienn/avatar.png'
+      ? `assets/characters/${playerId}/avatar.png`
       : 'assets/characters/npc/reaper/reaper_avatar.png';
     const box = document.createElement('div');
     box.className = 'card dialog';
@@ -662,8 +714,9 @@ class HellScene extends Phaser.Scene {
   }
 
   showLine(speaker, text, onNext) {
+    const playerId = Save.data.last.character || 'arienn';
     const avatar = speaker === 'player'
-      ? 'assets/characters/arienn/avatar.png'
+      ? `assets/characters/${playerId}/avatar.png`
       : 'assets/characters/npc/reaper/reaper_avatar.png';
     const box = document.createElement('div');
     box.className = 'card dialog';
@@ -816,22 +869,23 @@ class GameScene extends Phaser.Scene {
       toLoad.push(charKey);
     }
 
+    const objKeys = [
+      'tree_1','tree_2','tree_3',
+      'stone_1','stone_2','stone_3',
+      'grave_1','grave_2','grave_3'
+    ];
     if (this.selMap.id === 'frozen_crossroads') {
-      const objKeys = [
-        'tree_1','tree_2','tree_3',
-        'stone_1','stone_2','stone_3',
-        'grave_1','grave_2','grave_3',
-        'snowman_1','snowman_2','snowman_3',
-        'portal',
-        'pear'
-      ];
-      objKeys.forEach(k => {
-        if (!this.textures.exists('obj_' + k)) {
-          this.load.image('obj_' + k, `assets/objects/${k}.png`);
-          toLoad.push('obj_' + k);
-        }
-      });
+      objKeys.push('snowman_1','snowman_2','snowman_3');
+    } else if (this.selMap.id === 'crystal_cavern') {
+      objKeys.push('cactoos_1','cactoos_2','cactoos_3');
     }
+    objKeys.push('portal', 'pear');
+    objKeys.forEach(k => {
+      if (!this.textures.exists('obj_' + k)) {
+        this.load.image('obj_' + k, `assets/objects/${k}.png`);
+        toLoad.push('obj_' + k);
+      }
+    });
 
     const mapId = this.selMap.id;
     const tileKey = `map_${mapId}_tile`;
@@ -941,6 +995,9 @@ class GameScene extends Phaser.Scene {
     this.worldW = W * WORLD_MULT;
     this.worldH = H * WORLD_MULT;
     this.introDone = false;
+    if (this.input) this.input.enabled = true;
+    if (this.input?.keyboard) this.input.keyboard.enabled = true;
+    if (this.physics?.world) this.physics.world.resume();
     const controls = document.getElementById('controls');
     if (controls) controls.style.display = '';
     const top = Phaser.Display.Color.HexStringToColor(this.selMap.bg.top).color;
@@ -1072,8 +1129,6 @@ class GameScene extends Phaser.Scene {
     this.icicleTimer = 0;
     this.timeStart = this.time.now / 1000;
 
-    Save.data.stats.oblivionFruits = 0;
-    Save.commit(true);
 
     this.minimap = {
       g: this.add.graphics().setScrollFactor(0).setDepth(DEPTH.FX + 2),
@@ -1394,13 +1449,16 @@ class GameScene extends Phaser.Scene {
   }
 
   placeInteractables() {
-    if (this.selMap.id !== 'frozen_crossroads') return;
     const groups = [
       ['tree_1', 'tree_2', 'tree_3'],
       ['stone_1', 'stone_2', 'stone_3'],
-      ['grave_1', 'grave_2', 'grave_3'],
-      ['snowman_1', 'snowman_2', 'snowman_3']
+      ['grave_1', 'grave_2', 'grave_3']
     ];
+    if (this.selMap.id === 'frozen_crossroads') {
+      groups.push(['snowman_1', 'snowman_2', 'snowman_3']);
+    } else if (this.selMap.id === 'crystal_cavern') {
+      groups.push(['cactoos_1', 'cactoos_2', 'cactoos_3']);
+    }
     const margin = 140;
     const minDist = 180;
     const picked = groups.map(g => g[Math.floor(Math.random() * g.length)]);
@@ -1705,7 +1763,8 @@ class GameScene extends Phaser.Scene {
       Save.data.meta.bestTime = Math.max(Save.data.meta.bestTime || 0, lived);
       Save.data.meta.runs = (Save.data.meta.runs || 0) + 1;
       Save.commit(true);
-      this.scene.start('menu');
+      this.transitioning = true;
+      showEndGame('You died on the battlefield.', () => switchScene(this, 'menu'));
       return;
     }
 
