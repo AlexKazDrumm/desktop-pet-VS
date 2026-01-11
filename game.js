@@ -238,9 +238,10 @@ class CharacterSelectScene extends Phaser.Scene {
       if (!t || t.classList.contains('locked')) return;
       const id = t.getAttribute('data-id');
       Save.data.last.character = id;
+      Save.data.last.map = 'frozen_crossroads';
       Save.commit();
       hideOverlay();
-      this.scene.start('mapselect');
+      this.scene.start('game');
     });
 
     document.getElementById('backBtn').onclick = () => {
@@ -382,14 +383,13 @@ class GameScene extends Phaser.Scene {
       if (this.scene.isPaused()) this.scene.resume();
       const mgr = this.scene.manager;
       const startMenu = () => {
-        if (mgr.isActive('game')) mgr.stop('game');
+        mgr.getScenes(true).forEach(s => {
+          if (s.scene.key !== 'menu') mgr.stop(s.scene.key);
+        });
         if (mgr.getScene('game')) {
           mgr.remove('game');
           mgr.add('game', GameScene, false);
         }
-        if (mgr.isActive('mapselect')) mgr.stop('mapselect');
-        if (mgr.isActive('charselect')) mgr.stop('charselect');
-        if (mgr.isActive('boot')) mgr.stop('boot');
         if (!mgr.isActive('menu')) mgr.start('menu');
         else mgr.wake('menu');
         mgr.bringToTop('menu');
@@ -519,6 +519,7 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     this.worldW = W * WORLD_MULT;
     this.worldH = H * WORLD_MULT;
+    this.introDone = false;
     const controls = document.getElementById('controls');
     if (controls) controls.style.display = '';
     // Gradient
@@ -685,6 +686,7 @@ class GameScene extends Phaser.Scene {
       `XP: ${this.stats.xp}`,
       `Nova: ready`
     ]);
+    this.startIntroDialog();
 
     // Cleanup on exit
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -884,6 +886,48 @@ class GameScene extends Phaser.Scene {
     document.addEventListener('keydown', keyh);
   }
 
+  startIntroDialog() {
+    const lines = [
+      'All right. Deep breath. The frost will listen.',
+      'Keep moving - these halls wake up fast.',
+      'Bolts first, nova when they crowd you.',
+      'The cold is ours. Don\'t let it slow you.',
+      'Ready. Let\'s begin.'
+    ];
+    let idx = 0;
+
+    const box = document.createElement('div');
+    box.className = 'card dialog';
+    box.innerHTML = `
+      <div class="dialog-row">
+        <img class="dialog-avatar" src="assets/characters/arienn/avatar.png" alt="Arienn">
+        <div class="dialog-text">
+          <div class="dialog-body">${lines[idx]}</div>
+          <div class="dialog-actions">
+            <span class="btn" id="dialogNext">Next</span>
+          </div>
+        </div>
+      </div>
+    `;
+    showOverlay(box);
+
+    const advance = () => {
+      idx += 1;
+      if (idx >= lines.length) {
+        hideOverlay();
+        this.introDone = true;
+        box.removeEventListener('click', onClick);
+        return;
+      }
+      box.querySelector('.dialog-body').textContent = lines[idx];
+    };
+
+    const onClick = (e) => {
+      if (e.target.closest('#dialogNext') || e.target.closest('.dialog-row')) advance();
+    };
+    box.addEventListener('click', onClick);
+  }
+
   update(time, delta) {
     if (!this.player) return;
     const dt = delta / 1000, p = this.player, s = this.stats;
@@ -982,10 +1026,15 @@ class GameScene extends Phaser.Scene {
     });
 
     // Spawns
-    this.spawnTimer -= dt;
-    const every = Phaser.Math.Clamp(this.selMap.spawn.baseEvery - (this.time.now / 1000) * this.selMap.spawn.growth, 0.23, this.selMap.spawn.baseEvery);
-    if (this.spawnTimer <= 0) { this.spawnTimer = every; this.spawnEnemy(); }
-    this.bossTimer -= dt; if (this.bossTimer <= 0) { this.bossTimer = this.selMap.spawn.bossEvery; this.spawnBoss(); }
+    if (this.introDone) {
+      this.spawnTimer -= dt;
+      const every = Phaser.Math.Clamp(this.selMap.spawn.baseEvery - (this.time.now / 1000) * this.selMap.spawn.growth, 0.23, this.selMap.spawn.baseEvery);
+      if (this.spawnTimer <= 0) { this.spawnTimer = every; this.spawnEnemy(); }
+      this.bossTimer -= dt; if (this.bossTimer <= 0) { this.bossTimer = this.selMap.spawn.bossEvery; this.spawnBoss(); }
+    } else {
+      this.spawnTimer = 0;
+      this.bossTimer = this.selMap.spawn.bossEvery;
+    }
 
     // Levels
     while (s.xp >= s.level * 50) { s.level++; this.levelUp(); }
@@ -1079,7 +1128,7 @@ new Phaser.Game({
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
-  scene: [BootScene, MenuScene, CharacterSelectScene, MapSelectScene, GameScene],
+  scene: [BootScene, MenuScene, CharacterSelectScene, GameScene],
   physics: { default: 'arcade', arcade: { debug: false } }
 });
 

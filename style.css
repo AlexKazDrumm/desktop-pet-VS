@@ -111,6 +111,39 @@ input.txt{
 }
 canvas { image-rendering: pixelated; }
 
+.dialog{
+  width:min(900px, 94vw);
+  max-width:900px;
+}
+.dialog-row{
+  display:flex;
+  gap:12px;
+  align-items:stretch;
+}
+.dialog-avatar{
+  width:120px;
+  height:120px;
+  object-fit:cover;
+  border-radius:10px;
+  border:1px solid rgba(90,170,220,.6);
+  background:rgba(8,20,30,.4);
+}
+.dialog-text{
+  flex:1;
+  min-height:120px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+.dialog-body{
+  font-size:14px;
+  line-height:1.4;
+}
+.dialog-actions{
+  text-align:right;
+  margin-top:10px;
+}
+
 .levelup{
   width:min(1100px, 94vw);
   max-width:1100px;
