@@ -9,6 +9,9 @@ const DEPTH = {
 const WORLD_MULT = 5;
 const MINIMAP_SIZE = 140;
 const MINIMAP_MARGIN = 12;
+const INTERACT_RADIUS = 46;
+const OBJECT_MAX_HEIGHT = 0.9;
+const PORTAL_HEIGHT_MULT = 2.0;
 
 // ===== Saves (file via Electron or localStorage) =====
 const SAVE_FILE = 'save.json';
@@ -423,6 +426,22 @@ class GameScene extends Phaser.Scene {
       toLoad.push(charKey);
     }
 
+    if (this.selMap.id === 'frozen_crossroads') {
+      const objKeys = [
+        'tree_1','tree_2','tree_3',
+        'stone_1','stone_2','stone_3',
+        'grave_1','grave_2','grave_3',
+        'snowman_1','snowman_2','snowman_3',
+        'portal'
+      ];
+      objKeys.forEach(k => {
+        if (!this.textures.exists('obj_' + k)) {
+          this.load.image('obj_' + k, `assets/objects/${k}.png`);
+          toLoad.push('obj_' + k);
+        }
+      });
+    }
+
     // Map: tile and particles
     const mapId = this.selMap.id;
     const tileKey = `map_${mapId}_tile`;
@@ -655,6 +674,7 @@ class GameScene extends Phaser.Scene {
     this.enemies = this.physics.add.group();
     this.bullets = this.physics.add.group();
     this.pickups = this.physics.add.group();
+    this.obstacles = this.physics.add.staticGroup();
     this.perks = {};
     this.fx = [];
     this.spawnTimer = 0;
@@ -666,6 +686,10 @@ class GameScene extends Phaser.Scene {
       x: MINIMAP_MARGIN,
       y: H - MINIMAP_SIZE - MINIMAP_MARGIN
     };
+    this.interactables = [];
+    this.interactedCount = 0;
+    this.portal = null;
+    this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
     // Facing direction (like in VS: L/R only)
     this.facing = 1;       // 1 - right, -1 - left
@@ -677,6 +701,10 @@ class GameScene extends Phaser.Scene {
       this.damageEnemy(e, b.dmg);
       b.destroy();
     });
+    this.physics.add.collider(this.player, this.enemies);
+    this.physics.add.collider(this.enemies, this.enemies);
+    this.physics.add.collider(this.player, this.obstacles);
+    this.physics.add.collider(this.enemies, this.obstacles);
     this.scale.on('resize', this.onResize, this);
     // HUD
     setHUD([
@@ -686,6 +714,7 @@ class GameScene extends Phaser.Scene {
       `XP: ${this.stats.xp}`,
       `Nova: ready`
     ]);
+    this.placeInteractables();
     this.startIntroDialog();
 
     // Cleanup on exit
@@ -694,6 +723,13 @@ class GameScene extends Phaser.Scene {
       this.enemies?.clear(true, true);
       this.bullets?.clear(true, true);
       this.pickups?.clear(true, true);
+      this.obstacles?.clear(true, true);
+      this.interactables?.forEach(o => o.sprite?.destroy());
+      this.interactables?.forEach(o => o.prompt?.destroy());
+      this.interactables = [];
+      this.interactTarget = null;
+      this.portal?.destroy();
+      this.portal = null;
       this.minimap?.g?.destroy();
     });
   }
@@ -928,6 +964,56 @@ class GameScene extends Phaser.Scene {
     box.addEventListener('click', onClick);
   }
 
+  placeInteractables() {
+    if (this.selMap.id !== 'frozen_crossroads') return;
+    const groups = [
+      ['tree_1', 'tree_2', 'tree_3'],
+      ['stone_1', 'stone_2', 'stone_3'],
+      ['grave_1', 'grave_2', 'grave_3'],
+      ['snowman_1', 'snowman_2', 'snowman_3']
+    ];
+    const margin = 140;
+    const minDist = 180;
+    const picked = groups.map(g => g[Math.floor(Math.random() * g.length)]);
+    const positions = [];
+    const centerX = this.worldW / 2;
+    const centerY = this.worldH / 2;
+
+    picked.forEach((key) => {
+      let x = centerX, y = centerY;
+      for (let i = 0; i < 20; i++) {
+        x = Phaser.Math.Between(margin, this.worldW - margin);
+        y = Phaser.Math.Between(margin, this.worldH - margin);
+        const tooClose = positions.some(p => (p.x - x) ** 2 + (p.y - y) ** 2 < minDist ** 2);
+        if (!tooClose && (x - centerX) ** 2 + (y - centerY) ** 2 > 120 ** 2) break;
+      }
+      positions.push({ x, y });
+      const sprite = this.physics.add.staticSprite(x, y, 'obj_' + key).setDepth(DEPTH.PICKUP);
+      const targetH = this.player.displayHeight * OBJECT_MAX_HEIGHT;
+      sprite.setScale(targetH / sprite.height);
+      sprite.refreshBody();
+      this.obstacles.add(sprite);
+      const prompt = this.add.text(x, y, 'E', {
+        fontFamily: 'system-ui, Segoe UI, Roboto, Arial',
+        fontSize: '14px',
+        color: '#e7faff',
+        backgroundColor: 'rgba(10,20,28,0.6)',
+        padding: { left: 6, right: 6, top: 2, bottom: 2 }
+      }).setOrigin(0.5, 1).setDepth(DEPTH.FX + 3).setVisible(false);
+      this.interactables.push({ key, x, y, sprite, prompt, interacted: false });
+    });
+  }
+
+  spawnPortal() {
+    if (this.portal) return;
+    const x = this.worldW / 2;
+    const y = this.worldH / 2;
+    this.portal = this.add.sprite(x, y, 'obj_portal').setDepth(DEPTH.FX + 1);
+    const targetH = this.player.displayHeight * PORTAL_HEIGHT_MULT;
+    this.portal.setScale(targetH / this.portal.height);
+    this.portal.setTint(0xfff6a0);
+  }
+
   update(time, delta) {
     if (!this.player) return;
     const dt = delta / 1000, p = this.player, s = this.stats;
@@ -1025,6 +1111,37 @@ class GameScene extends Phaser.Scene {
       if (d < 24) { s.xp += (pp.type === 'xp_big' ? 8 : 3); pp.destroy(); }
     });
 
+    // Interactions
+    this.interactTarget = null;
+    if (this.introDone) {
+      let best = INTERACT_RADIUS * INTERACT_RADIUS;
+      this.interactables.forEach(o => {
+        if (o.interacted) return;
+        const d2 = (o.sprite.x - p.x) ** 2 + (o.sprite.y - p.y) ** 2;
+        if (d2 < best) {
+          best = d2;
+          this.interactTarget = o;
+        }
+      });
+      this.interactables.forEach(o => {
+        if (!o.prompt) return;
+        if (o === this.interactTarget) {
+          const offset = o.sprite.displayHeight * 0.6;
+          o.prompt.setPosition(o.sprite.x, o.sprite.y - offset);
+          o.prompt.setVisible(true);
+        } else {
+          o.prompt.setVisible(false);
+        }
+      });
+      if (this.interactTarget && Phaser.Input.Keyboard.JustDown(this.keyE)) {
+        this.interactTarget.interacted = true;
+        this.interactTarget.sprite.setTint(0x7aa9c6).setAlpha(0.5);
+        if (this.interactTarget.prompt) this.interactTarget.prompt.setVisible(false);
+        this.interactedCount += 1;
+        if (this.interactedCount >= this.interactables.length) this.spawnPortal();
+      }
+    }
+
     // Spawns
     if (this.introDone) {
       this.spawnTimer -= dt;
@@ -1068,13 +1185,14 @@ class GameScene extends Phaser.Scene {
 
     // HUD + autosave
     Save.data.stats.secondsPlayed += dt; Save.commit();
-    setHUD([
+    const hudLines = [
       `Player: ${Save.data.profile.name}`,
       `HP: ${Math.max(0, (s.hp || 0) | 0)}/${s.hpMax}`,
       `LVL: ${s.level}`,
       `XP: ${s.xp}`,
       `Nova: ${s.nova > 0 ? s.nova.toFixed(1) + 's' : 'ready'}`
-    ]);
+    ];
+    setHUD(hudLines);
     this.drawMinimap();
   }
 
@@ -1116,6 +1234,11 @@ class GameScene extends Phaser.Scene {
 
     g.fillStyle(0x57f287, 1);
     g.fillCircle(x0 + this.player.x * sx, y0 + this.player.y * sy, 2.5);
+
+    if (this.portal) {
+      g.fillStyle(0xfff36b, 1);
+      g.fillCircle(x0 + this.portal.x * sx, y0 + this.portal.y * sy, 3.5);
+    }
   }
 }
 
