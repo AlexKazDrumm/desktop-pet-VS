@@ -6,6 +6,8 @@ const DEPTH = {
   PICKUP: 2, ENEMY: 3, BOSS: 6, AURA: 7, PLAYER: 8, BULLET: 9, FX: 10
 };
 
+const WORLD_MULT = 5;
+
 // ===== Saves (file via Electron or localStorage) =====
 const SAVE_FILE = 'save.json';
 const Save = {
@@ -279,7 +281,7 @@ class MapSelectScene extends Phaser.Scene {
 
 // Helper: gradient background by map
 function drawBG(scene, top = 0x0e1722, bottom = 0x0a111a) {
-  const W = scene.scale.width, H = scene.scale.height;
+  const W = scene.worldW, H = scene.worldH;
   if (scene.bgG) scene.bgG.destroy();
   const g = scene.add.graphics();
   g.fillGradientStyle(top, top, bottom, bottom, 1);
@@ -308,7 +310,10 @@ class GameScene extends Phaser.Scene {
     const W = gameSize.width, H = gameSize.height;
     // camera + physics
     this.cameras.main.setSize(W, H);
-    if (this.physics?.world) this.physics.world.setBounds(0, 0, W, H);
+    this.worldW = W * WORLD_MULT;
+    this.worldH = H * WORLD_MULT;
+    if (this.physics?.world) this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
+    this.cameras.main.setBounds(0, 0, this.worldW, this.worldH);
     // background
     if (this.bgG && this._bgColors){
       this.bgG.clear();
@@ -319,17 +324,17 @@ class GameScene extends Phaser.Scene {
         Phaser.Display.Color.HexStringToColor(this.selMap.bg.bottom).color,
         1
       );
-      this.bgG.fillRect(0, 0, W, H);
+      this.bgG.fillRect(0, 0, this.worldW, this.worldH);
     }
     // tile sprite
     if (this.ground){
-      this.ground.setPosition(W/2, H/2).setSize(W, H);
+      this.ground.setPosition(this.worldW / 2, this.worldH / 2).setSize(this.worldW, this.worldH);
     }
     // emitter - update spawn range by width
     if (this.em?.config){
       this.em.setConfig({
         ...this.em.config,
-        x: { min: 0, max: W }
+        x: { min: 0, max: this.worldW }
       });
     }
   }
@@ -487,6 +492,8 @@ class GameScene extends Phaser.Scene {
   setupWorld() {
     this.ensureAnims();
     const W = this.scale.width, H = this.scale.height;
+    this.worldW = W * WORLD_MULT;
+    this.worldH = H * WORLD_MULT;
     // Gradient
     const top = Phaser.Display.Color.HexStringToColor(this.selMap.bg.top).color;
     const bottom = Phaser.Display.Color.HexStringToColor(this.selMap.bg.bottom).color;
@@ -495,7 +502,7 @@ class GameScene extends Phaser.Scene {
     // Tiled background
     const mapId = this.selMap.id;
     const tileKey = `map_${mapId}_tile`;
-    this.ground = this.add.tileSprite(W/2, H/2, W, H, tileKey)
+    this.ground = this.add.tileSprite(this.worldW / 2, this.worldH / 2, this.worldW, this.worldH, tileKey)
       .setDepth(DEPTH.GROUND);
 
     // Map particles (Phaser 3.60+)
@@ -508,7 +515,7 @@ class GameScene extends Phaser.Scene {
     };
 
     this.em = this.add.particles(0, 0, partKey, {
-      x: { min: 0, max: W },
+      x: { min: 0, max: this.worldW },
       y: -12,
       quantity: P.rate, frequency: 180,
       lifespan: P.lifespan,
@@ -524,13 +531,15 @@ class GameScene extends Phaser.Scene {
     // Player
     const charKey = 'char_' + this.selChar.id;
     this.player = this.physics.add
-      .sprite(W/2, H/2, charKey, this.selChar.anim.walk + '0')
+      .sprite(this.worldW / 2, this.worldH / 2, charKey, this.selChar.anim.walk + '0')
       .setCollideWorldBounds(true)
       .setDepth(DEPTH.PLAYER);
 
     // Narrower collider
     this.player.body.setSize(28, 44).setOffset(18, 16);
-    this.physics.world.setBounds(0, 0, W, H);
+    this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
+    this.cameras.main.setBounds(0, 0, this.worldW, this.worldH);
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     // Character animations
     const walkKey = `${charKey}_walk`;
     const castKey = `${charKey}_cast`;
@@ -733,7 +742,7 @@ class GameScene extends Phaser.Scene {
 
   spawnEnemy() {
     const side = Math.floor(Math.random() * 4);
-    let x = 0, y = 0, W = this.scale.width, H = this.scale.height;
+    let x = 0, y = 0, W = this.worldW, H = this.worldH;
     if (side === 0) { x = -30; y = Math.random() * H; }
     else if (side === 1) { x = W + 30; y = Math.random() * H; }
     else if (side === 2) { x = Math.random() * W; y = -30; }
@@ -750,7 +759,7 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnBoss() {
-    const W = this.scale.width;
+    const W = this.worldW;
     const e = this.createEnemy('wendigo', Math.random() * W, -60, 600 + (this.time.now / 1000) * 8, 85);
     this.enemies.add(e);
   }
@@ -829,8 +838,8 @@ class GameScene extends Phaser.Scene {
     let dx = (this.input.keyboard.addKey('D').isDown ? 1 : 0) + (this.input.keyboard.addKey('A').isDown ? -1 : 0);
     let dy = (this.input.keyboard.addKey('S').isDown ? 1 : 0) + (this.input.keyboard.addKey('W').isDown ? -1 : 0);
     const len = Math.hypot(dx, dy) || 1;
-    p.x = Phaser.Math.Clamp(p.x + (dx / len) * s.speed * dt, 0, this.scale.width);
-    p.y = Phaser.Math.Clamp(p.y + (dy / len) * s.speed * dt, 0, this.scale.height);
+    p.x = Phaser.Math.Clamp(p.x + (dx / len) * s.speed * dt, 0, this.worldW);
+    p.y = Phaser.Math.Clamp(p.y + (dy / len) * s.speed * dt, 0, this.worldH);
 
     // Update facing: if there is input, use it; otherwise face the target
     const target = this.nearestEnemy();
