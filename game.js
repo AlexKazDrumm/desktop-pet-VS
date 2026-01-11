@@ -9,7 +9,7 @@ const MINIMAP_MARGIN = 12;
 const INTERACT_RADIUS = 46;
 const OBJECT_MAX_HEIGHT = 0.9;
 const PORTAL_HEIGHT_MULT = 2.0;
-const MAX_ENEMIES = 60;
+const MAX_ENEMIES = 200;
 
 const SAVE_FILE = 'save.json';
 const Save = {
@@ -1004,6 +1004,7 @@ class GameScene extends Phaser.Scene {
     }
     const hitEnemy = this.physics.world.collide(this.player, this.enemies);
     this.physics.world.collide(this.player, this.obstacles);
+    this.physics.world.collide(this.enemies, this.enemies);
 
     const target = this.nearestEnemy();
     if (dx !== 0) this.facing = dx > 0 ? 1 : -1;
@@ -1256,8 +1257,14 @@ class GameScene extends Phaser.Scene {
     g.fillStyle(0x57f287, 1);
     g.fillCircle(x0 + this.player.x * sx, y0 + this.player.y * sy, 2.5);
 
+    g.fillStyle(0x6bb9ff, 0.9);
+    this.interactables.forEach(o => {
+      if (o.interacted) return;
+      g.fillCircle(x0 + o.sprite.x * sx, y0 + o.sprite.y * sy, 2);
+    });
+
     if (this.portal) {
-    g.fillStyle(0x4aa3ff, 1);
+      g.fillStyle(0x4aa3ff, 1);
       g.fillCircle(x0 + this.portal.x * sx, y0 + this.portal.y * sy, 3.5);
     }
   }
