@@ -1,11 +1,11 @@
-// Мост в рендер: файл-сейвы + опциональный Steam persona
+// Bridge to renderer: file saves + optional Steam persona
 const { contextBridge, ipcRenderer } = require('electron');
 
 let steam = null;
 try {
-  const Steamworks = require('steamworks.js'); // не обязателен
-  steam = Steamworks.init(480); // SpaceWar appId для дев-тестов
-} catch { /* ок, без Steam тоже работаем */ }
+  const Steamworks = require('steamworks.js'); // optional
+  steam = Steamworks.init(480); // SpaceWar appId for dev tests
+} catch { /* ok, works without Steam */ }
 
 contextBridge.exposeInMainWorld('filesave', {
   read: (name) => ipcRenderer.invoke('save:read', name),

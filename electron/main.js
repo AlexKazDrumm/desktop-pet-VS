@@ -1,4 +1,4 @@
-// Electron main: окно, IPC для сейвов (файл), загрузка index.html
+// Electron main: window, IPC for saves (file), load index.html
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -23,7 +23,7 @@ app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 
-// Простые сейвы в userData/saves/save.json
+// Simple saves in userData/saves/save.json
 const SAVE_DIR = path.join(app.getPath('userData'), 'saves');
 
 ipcMain.handle('save:read', async (_evt, fname) => {

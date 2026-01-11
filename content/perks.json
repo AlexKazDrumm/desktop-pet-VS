@@ -1,10 +1,10 @@
 [
-  { "id": "bolt_dmg", "name": "Ice Bolt +", "desc": "+25% урона ледяной стрелы" },
-  { "id": "fire_rate", "name": "Rapid Frost", "desc": "-12% перезарядка выстрела" },
-  { "id": "aura_r", "name": "Widen Aura", "desc": "+30 к радиусу ауры" },
-  { "id": "aura_slow", "name": "Deep Freeze", "desc": "+10% замедление в ауре" },
-  { "id": "nova_cd", "name": "Quick Nova", "desc": "-20% перезарядка новы" },
-  { "id": "hp_up",  "name": "Cold Resolve", "desc": "+20 HP и лечит на 10" },
-  { "id": "icicle_barrage", "name": "Icicle Barrage", "desc": "Периодически выпускает 6 сосулек по кругу" },
-  { "id": "ice_barrier", "name": "Ice Barrier", "desc": "Щит поглощает 30% урона" }
+  { "id": "bolt_dmg", "name": "Ice Bolt +", "desc": "+25% ice bolt damage" },
+  { "id": "fire_rate", "name": "Rapid Frost", "desc": "-12% shot cooldown" },
+  { "id": "aura_r", "name": "Widen Aura", "desc": "+30 to aura radius" },
+  { "id": "aura_slow", "name": "Deep Freeze", "desc": "+10% slow in aura" },
+  { "id": "nova_cd", "name": "Quick Nova", "desc": "-20% nova cooldown" },
+  { "id": "hp_up",  "name": "Cold Resolve", "desc": "+20 HP and heals 10" },
+  { "id": "icicle_barrage", "name": "Icicle Barrage", "desc": "Periodically fires 6 icicles in a ring" },
+  { "id": "ice_barrier", "name": "Ice Barrier", "desc": "Barrier absorbs 30% damage" }
 ]

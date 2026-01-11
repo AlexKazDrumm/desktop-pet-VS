@@ -1,15 +1,15 @@
 html,body{
   margin:0;padding:0;background:#0a0f14;color:#e7faff;
   font-family:system-ui,Segoe UI,Roboto,Arial;
-  overflow:hidden; /* никаких дефолтных скроллбаров */
+  overflow:hidden; /* no default scrollbars */
 }
 
-/* === Overlay / HUD / Buttons / Cards (база) === */
+/* === Overlay / HUD / Buttons / Cards (base) === */
 .overlay{
   position:fixed;inset:0;background:rgba(6,12,18,.75);
   display:flex;align-items:center;justify-content:center;z-index:10;
   padding:16px;
-  overflow:hidden; /* важное: убрали прокрутку */
+  overflow:hidden; /* important: no scrolling */
 }
 .overlay.hidden{display:none}
 
@@ -21,7 +21,7 @@ html,body{
   max-width:960px;
 }
 
-/* Контейнер выбора персонажа — без скроллов, строго 2 ряда карточек */
+/* Character select container - no scroll, strictly 2 rows of cards */
 .card.card--chars{
   width:min(1200px, 96vw);
   max-width:1200px;
@@ -48,16 +48,16 @@ input.txt{
   background:#0f2231;color:#e7faff
 }
 
-/* === Character Select (строго две строки, авто-колонки) === */
+/* === Character Select (strictly two rows, auto columns) === */
 .char-grid{
   --gap: 14px;
   display:grid;
   gap: var(--gap);
   margin-top:10px;
-  /* колонки/ряды задаём из JS через px, чтобы точно влезло */
+  /* columns/rows are set from JS in px to fit exactly */
 }
 
-/* Карточка тянется по высоте строки */
+/* Card stretches to row height */
 .char-card{
   position:relative;
   background:rgba(16,36,52,.95);
@@ -73,12 +73,12 @@ input.txt{
 .char-card:hover{transform:translateY(-2px)}
 .char-card.locked{cursor:not-allowed;filter:grayscale(100%)}
 .char-card.locked::after{
-  content:"Скоро";position:absolute;inset:10px;border-radius:10px;
+  content:"Coming soon";position:absolute;inset:10px;border-radius:10px;
   background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;
   font-weight:700;letter-spacing:.5px
 }
 
-/* Медиа: строго 2:3, картинка целиком */
+/* Media: strict 2:3, full image */
 .char-thumb-wrap{
   width:100%;
   aspect-ratio: 2 / 3;
@@ -93,7 +93,7 @@ input.txt{
   image-rendering:auto;
 }
 
-/* Текст ниже превью */
+/* Text under preview */
 .char-name{margin:8px 4px 2px;font-weight:600;line-height:1.2}
 .char-desc{
   margin:0 4px 8px; font-size:12px; opacity:.9; line-height:1.25;

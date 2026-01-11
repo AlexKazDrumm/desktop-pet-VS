@@ -1,8 +1,8 @@
 {
   "arienn": {
     "id": "arienn",
-    "name": "Ариэнн Ледяной Осколок",
-    "desc": "Маг льда: аура замедления, ледяные болты, нова.",
+    "name": "Arienn Ice Shard",
+    "desc": "Ice mage: slow aura, ice bolts, nova.",
     "atlas": "assets/characters/arienn/atlas.png",
     "atlasJson": "assets/characters/arienn/atlas.json",
     "anim": { "walk": "arienn_walk_", "cast": "arienn_cast_", "frames": 4 },
