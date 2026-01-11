@@ -9,6 +9,7 @@ const MINIMAP_MARGIN = 12;
 const INTERACT_RADIUS = 46;
 const OBJECT_MAX_HEIGHT = 0.9;
 const PORTAL_HEIGHT_MULT = 2.0;
+const MAX_ENEMIES = 60;
 
 const SAVE_FILE = 'save.json';
 const Save = {
@@ -639,6 +640,8 @@ class GameScene extends Phaser.Scene {
     this.bossTimer = this.selMap.spawn.bossEvery;
     this.icicleTimer = 0;
     this.timeStart = this.time.now / 1000;
+    Save.data.stats.oblivionFruits = 0;
+    Save.commit(true);
     this.minimap = {
       g: this.add.graphics().setScrollFactor(0).setDepth(DEPTH.FX + 2),
       x: MINIMAP_MARGIN,
@@ -975,10 +978,10 @@ class GameScene extends Phaser.Scene {
     if (this.portal) return;
     const x = this.worldW / 2;
     const y = this.worldH / 2;
-    this.portal = this.add.sprite(x, y, 'obj_portal').setDepth(DEPTH.FX + 1);
+    this.portal = this.obstacles.create(x, y, 'obj_portal').setDepth(DEPTH.FX + 1);
     const targetH = this.player.displayHeight * PORTAL_HEIGHT_MULT;
     this.portal.setScale(targetH / this.portal.height);
-    this.portal.setTint(0x4aa3ff);
+    this.portal.refreshBody();
   }
 
   update(time, delta) {
@@ -1149,10 +1152,26 @@ class GameScene extends Phaser.Scene {
     }
 
     if (this.introDone) {
+      const activeEnemies = this.enemies.countActive(true);
       this.spawnTimer -= dt;
       const every = Phaser.Math.Clamp(this.selMap.spawn.baseEvery - (this.time.now / 1000) * this.selMap.spawn.growth, 0.23, this.selMap.spawn.baseEvery);
-      if (this.spawnTimer <= 0) { this.spawnTimer = every; this.spawnEnemy(); }
-      this.bossTimer -= dt; if (this.bossTimer <= 0) { this.bossTimer = this.selMap.spawn.bossEvery; this.spawnBoss(); }
+      if (this.spawnTimer <= 0) {
+        if (activeEnemies < MAX_ENEMIES) {
+          this.spawnTimer = every;
+          this.spawnEnemy();
+        } else {
+          this.spawnTimer = 0.2;
+        }
+      }
+      this.bossTimer -= dt;
+      if (this.bossTimer <= 0) {
+        if (activeEnemies < MAX_ENEMIES) {
+          this.bossTimer = this.selMap.spawn.bossEvery;
+          this.spawnBoss();
+        } else {
+          this.bossTimer = 1.0;
+        }
+      }
     } else {
       this.spawnTimer = 0;
       this.bossTimer = this.selMap.spawn.bossEvery;
