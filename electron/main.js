@@ -16,6 +16,7 @@ function createWindow () {
     }
   });
   win.setMenuBarVisibility(false);
+  // win.webContents.openDevTools({ mode: 'detach' });
   win.loadFile(path.join(__dirname, '..', 'index.html'));
 }
 

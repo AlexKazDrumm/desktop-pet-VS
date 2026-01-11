@@ -10,6 +10,55 @@ const INTERACT_RADIUS = 46;
 const OBJECT_MAX_HEIGHT = 0.9;
 const PORTAL_HEIGHT_MULT = 2.0;
 const MAX_ENEMIES = 200;
+const OBJECT_DETAILS = {
+  tree_1: { type: 'tree', details: { leaves: 'no leaves', branches: 'few branches' } },
+  tree_2: { type: 'tree', details: { leaves: 'no leaves', branches: 'many branches' } },
+  tree_3: { type: 'tree', details: { leaves: 'no leaves', branches: 'very many branches' } },
+  stone_1: { type: 'stone', details: { shape: 'round', base: 'nothing' } },
+  stone_2: { type: 'stone', details: { shape: 'round', base: 'skull and flowers' } },
+  stone_3: { type: 'stone', details: { shape: 'triangular', base: 'flowers' } },
+  grave_1: { type: 'grave', details: { shape: 'cross', base: 'nothing' } },
+  grave_2: { type: 'grave', details: { shape: 'rounded', base: 'skull and flowers' } },
+  grave_3: { type: 'grave', details: { shape: 'cross', base: 'flowers and candle' } },
+  snowman_1: { type: 'snowman', details: { head: 'top hat', hands: 'nothing' } },
+  snowman_2: { type: 'snowman', details: { head: 'multicolored hat', hands: 'broom' } },
+  snowman_3: { type: 'snowman', details: { head: 'blue hat', hands: 'gift' } }
+};
+
+const REAPER_Q = {
+  main: {
+    text: (idx) => `Which landmark was it (#${idx})?`,
+    options: ['tree', 'stone', 'cactus', 'snowman', 'grave', 'skeleton', 'house']
+  },
+  tree: [
+    { text: 'What were the leaves like?', options: ['lush canopy', 'dry leaves', 'no leaves'] },
+    { text: 'How many branches were there?', options: ['few branches', 'many branches', 'very many branches'] }
+  ],
+  stone: [
+    { text: 'What shape was it?', options: ['flat', 'round', 'triangular'] },
+    { text: 'Was there something at its base?', options: ['nothing', 'flowers', 'skull', 'skull and flowers'] }
+  ],
+  cactus: [
+    { text: 'What shape was it?', options: ['round', 'tall', 'many rounded lobes'] },
+    { text: 'Did it have flowers?', options: ['none', 'one flower', 'many flowers'] }
+  ],
+  snowman: [
+    { text: 'What was on its head?', options: ['top hat', 'bucket', 'multicolored hat', 'blue hat'] },
+    { text: 'What was in its hands?', options: ['nothing', 'broom', 'gift', 'staff'] }
+  ],
+  grave: [
+    { text: 'What shape was it?', options: ['cross', 'rounded', 'rectangular'] },
+    { text: 'Was there something at its base?', options: ['nothing', 'flowers', 'skull', 'candle', 'flowers and skull', 'flowers and candle', 'skull and candle'] }
+  ],
+  skeleton: [
+    { text: 'Which animal did it belong to?', options: ['cat', 'snake', 'horse', 'dragon'] },
+    { text: 'How many limbs were there?', options: ['1', '3', '5'] }
+  ],
+  house: [
+    { text: 'What shape was the building?', options: ['round', 'rectangular', 'angled'] },
+    { text: 'What color was it?', options: ['gray', 'blue', 'white', 'black'] }
+  ]
+};
 
 const SAVE_FILE = 'save.json';
 const Save = {
@@ -387,10 +436,18 @@ class HellScene extends Phaser.Scene {
     this.player.body.setSize(28, 44).setOffset(18, 16);
 
     this.keys = this.input.keyboard.addKeys('W,A,S,D');
+    this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    this.obstacles = this.physics.add.staticGroup();
 
-    this.reaper = this.add.sprite(W * 0.82, H * 0.52, 'reaper_sprite')
+    this.reaper = this.physics.add.sprite(W * 0.82, H * 0.52, 'reaper_sprite')
+      .setImmovable(true)
       .setDepth(DEPTH.ENEMY);
+    this.reaper.body.allowGravity = false;
+    const reaperH = this.player.displayHeight * 2.0;
+    this.reaper.setScale(reaperH / this.reaper.height);
+    this.reaper.refreshBody();
+    this.physics.add.collider(this.player, this.reaper);
     this.tweens.add({
       targets: this.reaper,
       y: this.reaper.y - 6,
@@ -400,10 +457,18 @@ class HellScene extends Phaser.Scene {
       ease: 'Sine.easeInOut'
     });
 
-    // Optional: allow returning to menu (prevents "stuck" if you need quick exit)
-    this._escHandler = () => {
-      this.scene.start('menu');
-    };
+    this.reaperPrompt = this.add.text(this.reaper.x, this.reaper.y, 'E', {
+      fontFamily: 'system-ui, Segoe UI, Roboto, Arial',
+      fontSize: '16px',
+      color: '#e7faff',
+      backgroundColor: 'rgba(10,20,28,0.7)',
+      padding: { left: 6, right: 6, top: 2, bottom: 2 }
+    }).setOrigin(0.5, 1).setDepth(DEPTH.FX + 3).setVisible(false);
+
+    this.hellPortal = null;
+    this.hellPortalPrompt = null;
+    this.quizActive = false;
+    this.lastObjects = (Save.data?.last?.interactables || []).map(o => ({ ...o }));
   }
 
   update(_time, delta) {
@@ -427,10 +492,192 @@ class HellScene extends Phaser.Scene {
       return;
     }
 
+    this.physics.world.collide(this.player, this.reaper);
+    if (this.hellPortal) this.physics.world.collide(this.player, this.hellPortal);
+
+    const radius = INTERACT_RADIUS;
+    const halfW = this.reaper.displayWidth * 0.5 + radius;
+    const halfH = this.reaper.displayHeight * 0.5 + radius;
+    const inZone = Math.abs(this.player.x - this.reaper.x) <= halfW && Math.abs(this.player.y - this.reaper.y) <= halfH;
+    if (inZone && !this.quizActive) {
+      const offset = this.reaper.displayHeight * 0.6;
+      this.reaperPrompt.setPosition(this.reaper.x, this.reaper.y - offset);
+      this.reaperPrompt.setVisible(true);
+      if (Phaser.Input.Keyboard.JustDown(this.keyE)) {
+        this.reaperPrompt.setVisible(false);
+        this.startReaperQuiz();
+      }
+    } else {
+      this.reaperPrompt.setVisible(false);
+    }
+
+    if (this.hellPortal && this.hellPortalPrompt) {
+      const pHalfW = this.hellPortal.displayWidth * 0.5 + radius;
+      const pHalfH = this.hellPortal.displayHeight * 0.5 + radius;
+      const pInZone = Math.abs(this.player.x - this.hellPortal.x) <= pHalfW && Math.abs(this.player.y - this.hellPortal.y) <= pHalfH;
+      if (pInZone) {
+        const offset = this.hellPortal.displayHeight * 0.6;
+        this.hellPortalPrompt.setPosition(this.hellPortal.x, this.hellPortal.y - offset);
+        this.hellPortalPrompt.setVisible(true);
+      } else {
+        this.hellPortalPrompt.setVisible(false);
+      }
+    }
+
     setHUD([
       `Player: ${Save.data.profile.name}`,
       'Location: Hell'
     ]);
+  }
+
+  startReaperQuiz() {
+    if (this.quizActive) return;
+    this.quizActive = true;
+    this.quizRemaining = this.lastObjects.map(o => ({ ...o }));
+    this.quizCorrect = 0;
+    this.quizIndex = 0;
+    this.askNextLandmark();
+  }
+
+  askNextLandmark() {
+    if (this.quizIndex >= 4) {
+      this.finishReaperQuiz();
+      return;
+    }
+    const q = REAPER_Q.main;
+    this.showQuestion('reaper', q.text(this.quizIndex + 1), q.options, (choice) => {
+      this.showLine('player', choice, () => {
+        this.askTypeDetails(choice);
+      });
+    });
+  }
+
+  askTypeDetails(type) {
+    const detailQs = REAPER_Q[type] || [];
+    const answers = {};
+    const askDetail = (idx) => {
+      if (idx >= detailQs.length) {
+        this.evaluateAnswer(type, answers);
+        return;
+      }
+      const q = detailQs[idx];
+      this.showQuestion('reaper', q.text, q.options, (choice) => {
+        this.showLine('player', choice, () => {
+          if (type === 'tree') answers[idx === 0 ? 'leaves' : 'branches'] = choice;
+          if (type === 'stone') answers[idx === 0 ? 'shape' : 'base'] = choice;
+          if (type === 'snowman') answers[idx === 0 ? 'head' : 'hands'] = choice;
+          if (type === 'grave') answers[idx === 0 ? 'shape' : 'base'] = choice;
+          if (type === 'cactus') answers[idx === 0 ? 'shape' : 'flowers'] = choice;
+          if (type === 'skeleton') answers[idx === 0 ? 'animal' : 'limbs'] = choice;
+          if (type === 'house') answers[idx === 0 ? 'shape' : 'color'] = choice;
+          askDetail(idx + 1);
+        });
+      });
+    };
+    if (detailQs.length === 0) {
+      this.evaluateAnswer(type, answers);
+    } else {
+      askDetail(0);
+    }
+  }
+
+  evaluateAnswer(type, answers) {
+    const idx = this.quizRemaining.findIndex(o => o.type === type);
+    if (idx >= 0) {
+      const obj = this.quizRemaining[idx];
+      const expected = obj.details || {};
+      let ok = true;
+      Object.keys(expected).forEach((k) => {
+        if (expected[k] !== answers[k]) ok = false;
+      });
+      if (ok) {
+        this.quizRemaining.splice(idx, 1);
+        this.quizCorrect += 1;
+      }
+    }
+    this.quizIndex += 1;
+    this.askNextLandmark();
+  }
+
+  finishReaperQuiz() {
+    if (this.quizCorrect === 4) {
+      this.showLine('reaper', 'Your memory is true. The way is open.', () => {
+        this.spawnHellPortal();
+        this.quizActive = false;
+      });
+    } else {
+      this.showLine('reaper', 'You are mistaken. Return when you remember.', () => {
+        this.quizActive = false;
+      });
+    }
+  }
+
+  spawnHellPortal() {
+    if (this.hellPortal) return;
+    const x = this.worldW / 2;
+    const y = this.worldH / 2;
+    this.hellPortal = this.obstacles.create(x, y, 'obj_portal').setDepth(DEPTH.PLAYER - 1);
+    const targetH = this.player.displayHeight * PORTAL_HEIGHT_MULT;
+    this.hellPortal.setScale(targetH / this.hellPortal.height);
+    this.hellPortal.refreshBody();
+    this.hellPortalPrompt = this.add.text(x, y, 'E', {
+      fontFamily: 'system-ui, Segoe UI, Roboto, Arial',
+      fontSize: '16px',
+      color: '#e7faff',
+      backgroundColor: 'rgba(10,20,28,0.7)',
+      padding: { left: 6, right: 6, top: 2, bottom: 2 }
+    }).setOrigin(0.5, 1).setDepth(DEPTH.FX + 3).setVisible(false);
+  }
+
+  showQuestion(speaker, text, options, onSelect) {
+    const avatar = speaker === 'player'
+      ? 'assets/characters/arienn/avatar.png'
+      : 'assets/characters/npc/reaper/reaper_avatar.png';
+    const box = document.createElement('div');
+    box.className = 'card dialog';
+    box.innerHTML = `
+      <div class="dialog-row">
+        <img class="dialog-avatar" src="${avatar}" alt="${speaker}">
+        <div class="dialog-text">
+          <div class="dialog-body">${text}</div>
+          <div class="dialog-actions"></div>
+        </div>
+      </div>
+    `;
+    const actions = box.querySelector('.dialog-actions');
+    options.forEach((opt) => {
+      const btn = document.createElement('span');
+      btn.className = 'btn';
+      btn.textContent = opt;
+      btn.onclick = () => {
+        hideOverlay();
+        onSelect(opt);
+      };
+      actions.appendChild(btn);
+    });
+    showOverlay(box);
+  }
+
+  showLine(speaker, text, onNext) {
+    const avatar = speaker === 'player'
+      ? 'assets/characters/arienn/avatar.png'
+      : 'assets/characters/npc/reaper/reaper_avatar.png';
+    const box = document.createElement('div');
+    box.className = 'card dialog';
+    box.innerHTML = `
+      <div class="dialog-row">
+        <img class="dialog-avatar" src="${avatar}" alt="${speaker}">
+        <div class="dialog-text">
+          <div class="dialog-body">${text}</div>
+          <div class="dialog-actions"><span class="btn" id="dlgNext">Next</span></div>
+        </div>
+      </div>
+    `;
+    box.querySelector('#dlgNext').onclick = () => {
+      hideOverlay();
+      onNext();
+    };
+    showOverlay(box);
   }
 }
 
@@ -1157,6 +1404,12 @@ class GameScene extends Phaser.Scene {
     const positions = [];
     const centerX = this.worldW / 2;
     const centerY = this.worldH / 2;
+    const saved = picked.map((key) => {
+      const info = OBJECT_DETAILS[key];
+      return { key, type: info?.type, details: info?.details };
+    });
+    Save.data.last.interactables = saved;
+    Save.commit();
 
     picked.forEach((key) => {
       let x = centerX, y = centerY;
