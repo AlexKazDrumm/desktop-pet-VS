@@ -41,6 +41,16 @@ html,body{
   background:rgba(0,20,30,.5);border:1px solid rgba(80,180,255,.35);border-radius:8px
 }
 
+.controls{
+  position:fixed;left:0;right:0;bottom:8px;text-align:center;pointer-events:none;z-index:5;
+  font-size:12px;letter-spacing:.3px;
+  color:#cfe9f7;
+}
+.controls span{
+  display:inline-block;padding:6px 10px;border-radius:8px;
+  background:rgba(0,20,30,.45);border:1px solid rgba(80,180,255,.25)
+}
+
 h1,h2,h3{margin:8px 0}
 .small{font-size:12px;opacity:.85}
 input.txt{
@@ -100,3 +110,18 @@ input.txt{
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
 }
 canvas { image-rendering: pixelated; }
+
+.levelup{
+  width:min(1100px, 94vw);
+  max-width:1100px;
+}
+.levelup-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+  gap:12px;
+  margin-top:10px;
+  align-items:stretch;
+}
+.levelup-grid .card{
+  max-width:none;
+}

@@ -7,6 +7,8 @@ const DEPTH = {
 };
 
 const WORLD_MULT = 5;
+const MINIMAP_SIZE = 140;
+const MINIMAP_MARGIN = 12;
 
 // ===== Saves (file via Electron or localStorage) =====
 const SAVE_FILE = 'save.json';
@@ -337,6 +339,10 @@ class GameScene extends Phaser.Scene {
         x: { min: 0, max: this.worldW }
       });
     }
+    if (this.minimap) {
+      this.minimap.x = MINIMAP_MARGIN;
+      this.minimap.y = H - MINIMAP_SIZE - MINIMAP_MARGIN;
+    }
   }
 
   showPauseMenu(){
@@ -369,7 +375,7 @@ class GameScene extends Phaser.Scene {
       hideOverlay();
       this.pausedByMenu = false;
       if (this.scene.isPaused()) this.scene.resume();
-      this.time.delayedCall(0, () => this.scene.start('menu'));
+      this.scene.start('menu');
     };
 
     // Allow closing with Esc a second time
@@ -633,6 +639,11 @@ class GameScene extends Phaser.Scene {
     this.bossTimer = this.selMap.spawn.bossEvery;
     this.icicleTimer = 0;
     this.timeStart = this.time.now / 1000;
+    this.minimap = {
+      g: this.add.graphics().setScrollFactor(0).setDepth(DEPTH.FX + 2),
+      x: MINIMAP_MARGIN,
+      y: H - MINIMAP_SIZE - MINIMAP_MARGIN
+    };
 
     // Facing direction (like in VS: L/R only)
     this.facing = 1;       // 1 - right, -1 - left
@@ -660,6 +671,7 @@ class GameScene extends Phaser.Scene {
       this.enemies?.clear(true, true);
       this.bullets?.clear(true, true);
       this.pickups?.clear(true, true);
+      this.minimap?.g?.destroy();
     });
   }
 
@@ -808,13 +820,13 @@ class GameScene extends Phaser.Scene {
 
     this.scene.pause();
     const el = document.createElement('div');
-    el.className = 'card';
+    el.className = 'card levelup';
     el.innerHTML = '<h3>Level up - choose a perk</h3>';
-    const grid = document.createElement('div'); grid.className = 'grid';
+    const grid = document.createElement('div'); grid.className = 'levelup-grid';
     choices.forEach((c, i) => {
       const card = document.createElement('div'); card.className = 'card';
       card.innerHTML = `<h4>${c.name}</h4><div class="small">${c.desc}</div>
-        <div style="margin-top:8px"><span class="btn choose" data-i="${i}">Choose (${i + 1})</span></div>`;
+        <div style="margin-top:8px"><span class="btn choose" data-i="${i}">Choose</span></div>`;
       grid.appendChild(card);
     });
     el.appendChild(grid);
@@ -993,6 +1005,47 @@ class GameScene extends Phaser.Scene {
       `XP: ${s.xp}`,
       `Nova: ${s.nova > 0 ? s.nova.toFixed(1) + 's' : 'ready'}`
     ]);
+    this.drawMinimap();
+  }
+
+  drawMinimap() {
+    if (!this.minimap || !this.player) return;
+    const g = this.minimap.g;
+    const x0 = this.minimap.x;
+    const y0 = this.minimap.y;
+    const size = MINIMAP_SIZE;
+    const sx = size / this.worldW;
+    const sy = size / this.worldH;
+    const view = this.cameras.main.worldView;
+
+    g.clear();
+    g.fillStyle(0x08131c, 0.7);
+    g.fillRect(x0, y0, size, size);
+    g.lineStyle(1, 0x5bb7e5, 0.85);
+    g.strokeRect(x0, y0, size, size);
+
+    g.lineStyle(1, 0xffffff, 0.25);
+    g.strokeRect(
+      x0 + view.x * sx,
+      y0 + view.y * sy,
+      view.width * sx,
+      view.height * sy
+    );
+
+    g.fillStyle(0xff6b6b, 0.9);
+    this.enemies.children.iterate(e => {
+      if (!e || e.dead) return;
+      g.fillCircle(x0 + e.x * sx, y0 + e.y * sy, 2);
+    });
+
+    g.fillStyle(0xffd166, 0.9);
+    this.pickups.children.iterate(p => {
+      if (!p) return;
+      g.fillCircle(x0 + p.x * sx, y0 + p.y * sy, 2);
+    });
+
+    g.fillStyle(0x57f287, 1);
+    g.fillCircle(x0 + this.player.x * sx, y0 + this.player.y * sy, 2.5);
   }
 }
 
