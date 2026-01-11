@@ -653,14 +653,14 @@ class GameScene extends Phaser.Scene {
       // === SFX: create sound instance once ===
       this.sfx = this.sfx || {};
       if (!this.sfx.icebolt && this.cache.audio.exists('sfx_icebolt')) {
-        this.sfx.icebolt = this.sound.add('sfx_icebolt', { volume: 0.7 });
+        this.sfx.icebolt = this.sound.add('sfx_icebolt', { volume: 0.35 });
       }
       // Just in case: if web audio was locked until the first click,
       // unlock on first interaction
       if (this.sound.locked) {
         this.sound.once('unlocked', () => {
           if (!this.sfx.icebolt && this.cache.audio.exists('sfx_icebolt')) {
-            this.sfx.icebolt = this.sound.add('sfx_icebolt', { volume: 0.7 });
+            this.sfx.icebolt = this.sound.add('sfx_icebolt', { volume: 0.35 });
           }
         });
       }
@@ -690,6 +690,7 @@ class GameScene extends Phaser.Scene {
     this.interactedCount = 0;
     this.portal = null;
     this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.interactableBySprite = new Map();
 
     // Facing direction (like in VS: L/R only)
     this.facing = 1;       // 1 - right, -1 - left
@@ -701,9 +702,7 @@ class GameScene extends Phaser.Scene {
       this.damageEnemy(e, b.dmg);
       b.destroy();
     });
-    this.physics.add.collider(this.player, this.enemies);
     this.physics.add.collider(this.enemies, this.enemies);
-    this.physics.add.collider(this.player, this.obstacles);
     this.physics.add.collider(this.enemies, this.obstacles);
     this.scale.on('resize', this.onResize, this);
     // HUD
@@ -804,7 +803,7 @@ class GameScene extends Phaser.Scene {
       this.sfx.icebolt.play();
     } else {
       // fallback: create on the fly if something went wrong
-      this.sound.play('sfx_icebolt', { volume: 0.7 });
+      this.sound.play('sfx_icebolt', { volume: 0.35 });
     }
 
     // short cast animation + face the target
@@ -1000,7 +999,9 @@ class GameScene extends Phaser.Scene {
         backgroundColor: 'rgba(10,20,28,0.6)',
         padding: { left: 6, right: 6, top: 2, bottom: 2 }
       }).setOrigin(0.5, 1).setDepth(DEPTH.FX + 3).setVisible(false);
-      this.interactables.push({ key, x, y, sprite, prompt, interacted: false });
+      const data = { key, x, y, sprite, prompt, interacted: false };
+      this.interactables.push(data);
+      this.interactableBySprite.set(sprite, data);
     });
   }
 
@@ -1034,6 +1035,8 @@ class GameScene extends Phaser.Scene {
     } else {
       p.body.setVelocity(0, 0);
     }
+    const hitEnemy = this.physics.world.collide(this.player, this.enemies);
+    this.physics.world.collide(this.player, this.obstacles);
 
     // Update facing: if there is input, use it; otherwise face the target
     const target = this.nearestEnemy();
@@ -1096,14 +1099,6 @@ class GameScene extends Phaser.Scene {
 
       // face the player (L/R only)
       e.flipX = (p.x < e.x);
-
-      const rr = 30;
-      if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 <= rr * rr) {
-        let dmg = 16 * dt; if (this.perks.ice_barrier) dmg *= 0.7;
-        s.hp -= dmg;
-        const ux = (p.x - e.x) / (d || 1), uy = (p.y - e.y) / (d || 1);
-        e.x -= ux * 60 * dt; e.y -= uy * 60 * dt;
-      }
     });
 
     // Loot
@@ -1114,12 +1109,16 @@ class GameScene extends Phaser.Scene {
       if (d < 24) { s.xp += (pp.type === 'xp_big' ? 8 : 3); pp.destroy(); }
     });
 
-    // Interactions
+    // Interactions + contact damage
     this.interactTarget = null;
     if (this.introDone) {
-      let best = INTERACT_RADIUS * INTERACT_RADIUS;
+      const radius = INTERACT_RADIUS;
+      let best = radius * radius;
       this.interactables.forEach(o => {
         if (o.interacted) return;
+        const halfW = o.sprite.displayWidth * 0.5 + radius;
+        const halfH = o.sprite.displayHeight * 0.5 + radius;
+        if (Math.abs(p.x - o.sprite.x) > halfW || Math.abs(p.y - o.sprite.y) > halfH) return;
         const d2 = (o.sprite.x - p.x) ** 2 + (o.sprite.y - p.y) ** 2;
         if (d2 < best) {
           best = d2;
@@ -1143,6 +1142,12 @@ class GameScene extends Phaser.Scene {
         this.interactedCount += 1;
         if (this.interactedCount >= this.interactables.length) this.spawnPortal();
       }
+    }
+
+    if (hitEnemy) {
+      let dmg = 16 * dt;
+      if (this.perks.ice_barrier) dmg *= 0.7;
+      s.hp -= dmg;
     }
 
     // Spawns
@@ -1193,7 +1198,8 @@ class GameScene extends Phaser.Scene {
       `HP: ${Math.max(0, (s.hp || 0) | 0)}/${s.hpMax}`,
       `LVL: ${s.level}`,
       `XP: ${s.xp}`,
-      `Nova: ${s.nova > 0 ? s.nova.toFixed(1) + 's' : 'ready'}`
+      `Nova: ${s.nova > 0 ? s.nova.toFixed(1) + 's' : 'ready'}`,
+      `Relics: ${this.interactedCount}/${this.interactables.length || 4}`
     ];
     setHUD(hudLines);
     this.drawMinimap();
