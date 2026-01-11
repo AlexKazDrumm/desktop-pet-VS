@@ -369,8 +369,16 @@ class CharacterSelectScene extends Phaser.Scene {
       const mediaH = Math.floor(cardW * 3/2);  // 2:3
       const cardH = mediaH + TEXT_H;
 
-      charsGrid.style.gridTemplateColumns = `repeat(${cols}, ${cardW}px)`;
-      charsGrid.style.gridTemplateRows    = `repeat(${rows}, ${cardH}px)`;
+      charsGrid.style.display = 'flex';
+      charsGrid.style.flexWrap = 'wrap';
+      charsGrid.style.justifyContent = 'center';
+      charsGrid.style.alignContent = 'flex-start';
+      charsGrid.style.gap = G + 'px';
+      charsGrid.style.width = '100%';
+      Array.from(charsGrid.children).forEach((el) => {
+        el.style.width = cardW + 'px';
+        el.style.height = cardH + 'px';
+      });
     }
     layout();
     window.addEventListener('resize', layout);
