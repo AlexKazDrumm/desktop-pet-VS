@@ -741,6 +741,7 @@ class GameScene extends Phaser.Scene {
     const e = this.physics.add.sprite(x, y, 'base', prefix + '0')
       .setDepth(kind === 'wendigo' ? DEPTH.BOSS : DEPTH.ENEMY);
     e.kind = kind; e.hp = hp; e.speed = speed; e.dead = false;
+    e.setCollideWorldBounds(true);
 
     // collider sizes
     if (kind === 'wendigo') e.body.setSize(64, 80).setOffset(16, 8);
@@ -988,11 +989,10 @@ class GameScene extends Phaser.Scene {
         if (!tooClose && (x - centerX) ** 2 + (y - centerY) ** 2 > 120 ** 2) break;
       }
       positions.push({ x, y });
-      const sprite = this.physics.add.staticSprite(x, y, 'obj_' + key).setDepth(DEPTH.PICKUP);
+      const sprite = this.obstacles.create(x, y, 'obj_' + key).setDepth(DEPTH.PICKUP);
       const targetH = this.player.displayHeight * OBJECT_MAX_HEIGHT;
       sprite.setScale(targetH / sprite.height);
       sprite.refreshBody();
-      this.obstacles.add(sprite);
       const prompt = this.add.text(x, y, 'E', {
         fontFamily: 'system-ui, Segoe UI, Roboto, Arial',
         fontSize: '14px',
@@ -1011,7 +1011,7 @@ class GameScene extends Phaser.Scene {
     this.portal = this.add.sprite(x, y, 'obj_portal').setDepth(DEPTH.FX + 1);
     const targetH = this.player.displayHeight * PORTAL_HEIGHT_MULT;
     this.portal.setScale(targetH / this.portal.height);
-    this.portal.setTint(0xfff6a0);
+    this.portal.setTint(0x4aa3ff);
   }
 
   update(time, delta) {
@@ -1029,8 +1029,11 @@ class GameScene extends Phaser.Scene {
     let dx = (this.input.keyboard.addKey('D').isDown ? 1 : 0) + (this.input.keyboard.addKey('A').isDown ? -1 : 0);
     let dy = (this.input.keyboard.addKey('S').isDown ? 1 : 0) + (this.input.keyboard.addKey('W').isDown ? -1 : 0);
     const len = Math.hypot(dx, dy) || 1;
-    p.x = Phaser.Math.Clamp(p.x + (dx / len) * s.speed * dt, 0, this.worldW);
-    p.y = Phaser.Math.Clamp(p.y + (dy / len) * s.speed * dt, 0, this.worldH);
+    if (dx !== 0 || dy !== 0) {
+      p.body.setVelocity((dx / len) * s.speed, (dy / len) * s.speed);
+    } else {
+      p.body.setVelocity(0, 0);
+    }
 
     // Update facing: if there is input, use it; otherwise face the target
     const target = this.nearestEnemy();
@@ -1089,7 +1092,7 @@ class GameScene extends Phaser.Scene {
       const vx = p.x - e.x, vy = p.y - e.y, d = Math.hypot(vx, vy) || 1;
       let sp = e.speed;
       if (Math.hypot(e.x - p.x, e.y - p.y) < s.auraR) sp *= s.auraSlow;
-      e.x += (vx / d) * sp * dt; e.y += (vy / d) * sp * dt;
+      e.body.setVelocity((vx / d) * sp, (vy / d) * sp);
 
       // face the player (L/R only)
       e.flipX = (p.x < e.x);
@@ -1236,7 +1239,7 @@ class GameScene extends Phaser.Scene {
     g.fillCircle(x0 + this.player.x * sx, y0 + this.player.y * sy, 2.5);
 
     if (this.portal) {
-      g.fillStyle(0xfff36b, 1);
+    g.fillStyle(0x4aa3ff, 1);
       g.fillCircle(x0 + this.portal.x * sx, y0 + this.portal.y * sy, 3.5);
     }
   }
