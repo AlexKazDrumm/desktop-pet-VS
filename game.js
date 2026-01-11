@@ -123,6 +123,11 @@ class MenuScene extends Phaser.Scene {
   constructor() { super('menu'); }
   create() {
     this.cameras.main.setBackgroundColor('#0e1620');
+    const mgr = this.scene.manager;
+    if (mgr.isActive('game')) mgr.stop('game');
+    if (HUD) HUD.innerHTML = '';
+    const controls = document.getElementById('controls');
+    if (controls) controls.style.display = 'none';
     const box = document.createElement('div');
     box.className = 'card';
     box.innerHTML = `
@@ -375,7 +380,21 @@ class GameScene extends Phaser.Scene {
       hideOverlay();
       this.pausedByMenu = false;
       if (this.scene.isPaused()) this.scene.resume();
-      this.scene.start('menu');
+      const mgr = this.scene.manager;
+      const startMenu = () => {
+        if (mgr.isActive('game')) mgr.stop('game');
+        if (mgr.getScene('game')) {
+          mgr.remove('game');
+          mgr.add('game', GameScene, false);
+        }
+        if (mgr.isActive('mapselect')) mgr.stop('mapselect');
+        if (mgr.isActive('charselect')) mgr.stop('charselect');
+        if (mgr.isActive('boot')) mgr.stop('boot');
+        if (!mgr.isActive('menu')) mgr.start('menu');
+        else mgr.wake('menu');
+        mgr.bringToTop('menu');
+      };
+      setTimeout(startMenu, 0);
     };
 
     // Allow closing with Esc a second time
@@ -500,6 +519,8 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     this.worldW = W * WORLD_MULT;
     this.worldH = H * WORLD_MULT;
+    const controls = document.getElementById('controls');
+    if (controls) controls.style.display = '';
     // Gradient
     const top = Phaser.Display.Color.HexStringToColor(this.selMap.bg.top).color;
     const bottom = Phaser.Display.Color.HexStringToColor(this.selMap.bg.bottom).color;
