@@ -741,12 +741,40 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnEnemy() {
-    const side = Math.floor(Math.random() * 4);
-    let x = 0, y = 0, W = this.worldW, H = this.worldH;
-    if (side === 0) { x = -30; y = Math.random() * H; }
-    else if (side === 1) { x = W + 30; y = Math.random() * H; }
-    else if (side === 2) { x = Math.random() * W; y = -30; }
-    else { x = Math.random() * W; y = H + 30; }
+    const W = this.worldW, H = this.worldH;
+    const view = this.cameras.main.worldView;
+    const nearChance = 0.8;
+    const nearPad = 40;
+    const farPad = 80;
+    let x = 0, y = 0;
+
+    const clampToWorld = () => {
+      x = Phaser.Math.Clamp(x, 0, W);
+      y = Phaser.Math.Clamp(y, 0, H);
+    };
+
+    const spawnNearView = () => {
+      const side = Math.floor(Math.random() * 4);
+      const vx = view.x, vy = view.y, vw = view.width, vh = view.height;
+      if (side === 0) { x = vx - nearPad; y = vy + Math.random() * vh; }
+      else if (side === 1) { x = vx + vw + nearPad; y = vy + Math.random() * vh; }
+      else if (side === 2) { x = vx + Math.random() * vw; y = vy - nearPad; }
+      else { x = vx + Math.random() * vw; y = vy + vh + nearPad; }
+      clampToWorld();
+    };
+
+    if (Math.random() < nearChance) {
+      spawnNearView();
+    } else {
+      const vx = view.x, vy = view.y, vw = view.width, vh = view.height;
+      for (let i = 0; i < 8; i++) {
+        x = Math.random() * W;
+        y = Math.random() * H;
+        if (x < vx - farPad || x > vx + vw + farPad || y < vy - farPad || y > vy + vh + farPad) break;
+      }
+      clampToWorld();
+    }
+
     const t = (this.time.now / 1000) / 60;
     const speed = Phaser.Math.Clamp(70 + t * 12, 70, 170);
     const hp = 10 + t * 8;
