@@ -101,27 +101,6 @@ class BootScene extends Phaser.Scene {
         <div style="margin-top:10px"><span class="btn" id="okBtn">ОК</span></div>
       `;
       showOverlay(box);
-      const gridEl   = box.querySelector('.char-grid');
-      const headerEl = box.querySelector('h3');
-      const backWrap = back; // твой div с кнопкой "Назад"
-
-      const fitChars = () => {
-        const vh = window.innerHeight;
-        const overlayPad = 16 * 2;  // .overlay padding
-        const cardPad    = 16 * 2;  // .card padding
-        const headerH = headerEl?.offsetHeight || 0;
-        const backH   = backWrap?.offsetHeight ? (backWrap.offsetHeight + 10) : 0;
-
-        // доступная высота под саму сетку
-        const gridH = Math.max(260, vh - overlayPad - cardPad - headerH - backH);
-        gridEl.style.setProperty('--grid-h', gridH + 'px');
-      };
-
-      fitChars();
-      window.addEventListener('resize', fitChars);
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-        window.removeEventListener('resize', fitChars);
-      });
       await new Promise(res => {
         box.querySelector('#okBtn').onclick = () => {
           const v = (box.querySelector('#playerName').value || '').trim().slice(0, 24);
@@ -992,3 +971,4 @@ new Phaser.Game({
   scene: [BootScene, MenuScene, CharacterSelectScene, MapSelectScene, GameScene],
   physics: { default: 'arcade', arcade: { debug: false } }
 });
+
