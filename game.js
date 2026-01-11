@@ -1912,16 +1912,10 @@ class GameScene extends Phaser.Scene {
     g.fillStyle(0x57f287, 1);
     g.fillCircle(x0 + this.player.x * sx, y0 + this.player.y * sy, 2.5);
 
-    g.fillStyle(0x6bb9ff, 0.9);
-    this.interactables.forEach(o => {
-      if (o.interacted) return;
-      g.fillCircle(x0 + o.sprite.x * sx, y0 + o.sprite.y * sy, 2);
-    });
-
-    if (this.portal) {
-      g.fillStyle(0x4aa3ff, 1);
-      g.fillCircle(x0 + this.portal.x * sx, y0 + this.portal.y * sy, 3.5);
-    }
+      if (this.portal) {
+        g.fillStyle(0x4aa3ff, 1);
+        g.fillCircle(x0 + this.portal.x * sx, y0 + this.portal.y * sy, 3.5);
+      }
   }
 }
 

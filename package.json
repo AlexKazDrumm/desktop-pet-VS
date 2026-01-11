@@ -1,5 +1,5 @@
 {
-  "name": "arienn-ice-survivor-menu-demo",
+  "name": "order-of-time",
   "version": "0.4.0",
   "main": "electron/main.js",
   "private": true,

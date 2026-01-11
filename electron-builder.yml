@@ -1,12 +1,13 @@
-appId: com.demo.arienn
-productName: Arienn Ice Survivor Demo
+appId: com.orderoftime.game
+productName: Order Of Time
 files:
   - "index.html"
   - "style.css"
   - "game.js"
+  - "assets/**"
   - "content/**"
   - "electron/**"
 asar: true
-win: { target: nsis }
+win: { target: nsis, signAndEditExecutable: false }
 linux: { target: AppImage }
 mac: { target: dmg }
